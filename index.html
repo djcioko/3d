@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Puppet Rig v3.0 - Hybrid 2D/3D Engine</title>
+  <title>Puppet Rig v3.1 - Full Active Engine</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 100vw; height: 100vh; overflow: hidden; background-color: #08080c; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
@@ -62,21 +62,20 @@
   <button id="toggle-ui-btn">👁 Hide UI (H)</button>
 
   <div id="ui-overlay">
-    <button id="start-btn" class="btn-main">▶ Pornire Engine 2D / 3D</button>
+    <button id="start-btn" class="btn-main">▶ Pornire Cameră & Engine</button>
     <div id="status">Apasă pe buton pentru start...</div>
 
     <div class="upload-group">
       <label>Comutatoare Generale</label>
       <div class="row-btns">
-        <button id="toggle-skeleton" class="btn-toggle active">Linii Tracking: ON</button>
+        <button id="toggle-skeleton" class="btn-toggle active">Tracking: ON</button>
         <button id="toggle-crop" class="btn-toggle active">Crop AI: ON</button>
         <button id="reset-offsets" class="btn-toggle" style="border-color:#ff0055; color:#ff3366;">Reset Calibrare</button>
       </div>
     </div>
 
-    <!-- Upload Permis 2D (PNG/JPG) si 3D (GLB/GLTF) -->
     <div class="upload-group">
-      <label>Încărcare Fișiere (PNG / JPG / GLB / GLTF)</label>
+      <label>Încărcare Sloturi (2D PNG sau 3D GLB)</label>
       
       <div class="item-row">
         <div class="item-row-header">
@@ -112,17 +111,17 @@
     </div>
 
     <div class="upload-group">
-      <label>Calibrare Cap</label>
+      <label>Calibrare Pozitie Cap</label>
       <div class="scale-controls">
         <span>Scală Cap:</span>
         <input type="range" id="scale-head" min="0.3" max="3.0" step="0.05" value="1.0">
       </div>
       <div class="scale-controls">
-        <span>Ajustare Y (Sus/Jos):</span>
+        <span>Offset Y:</span>
         <input type="range" id="offset-head-y" min="-150" max="150" step="2" value="0">
       </div>
       <div class="scale-controls">
-        <span>Ajustare X (Stânga/Dreapta):</span>
+        <span>Offset X:</span>
         <input type="range" id="offset-head-x" min="-150" max="150" step="2" value="0">
       </div>
     </div>
@@ -134,7 +133,7 @@
         <input type="range" id="scale-torso" min="0.5" max="3.0" step="0.1" value="1.0">
       </div>
       <div class="scale-controls">
-        <span>Grosime / Scală Brațe:</span>
+        <span>Scală Brațe:</span>
         <input type="range" id="scale-arms" min="0.5" max="3.0" step="0.1" value="1.0">
       </div>
     </div>
@@ -152,7 +151,6 @@
 </div>
 
 <script>
-  // Elements
   const videoElement = document.getElementById('webcam');
   const bgVideoElement = document.getElementById('bg-video');
   const canvasElement = document.getElementById('output_canvas');
@@ -184,7 +182,7 @@
   const sliderTorso = document.getElementById('scale-torso');
   const sliderArms = document.getElementById('scale-arms');
 
-  // IndexedDB Support pentru fișiere mari (GLB / PNG)
+  // IndexedDB Support
   function openDB() {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open('PuppetRigDB', 1);
@@ -221,7 +219,7 @@
     if (e.key === 'h' || e.key === 'H') toggleUI();
   });
 
-  // Tracking & Options
+  // State Vars
   let showSkeleton = localStorage.getItem('app_showSkeleton') !== 'false';
   let enableCrop = localStorage.getItem('app_crop') !== 'false';
 
@@ -251,7 +249,7 @@
 
   const puppetScales = { head: 1.0, torso: 1.0, arms: 1.0 };
 
-  // Three.js Engine Setup (Sincronizat peste Canvas 2D)
+  // Three.js Engine Setup
   const threeScene = new THREE.Scene();
   const threeCamera = new THREE.OrthographicCamera(0, window.innerWidth, 0, window.innerHeight, -1000, 1000);
   threeCamera.position.z = 100;
@@ -284,39 +282,19 @@
   window.addEventListener('resize', resizeCanvas);
   resizeCanvas();
 
-  // Drag & Drop pentru ajustare umeri cu mouse-ul
-  let draggingPoint = null;
-  let currentPoints = {};
+  // Slider Events
+  sliderHead.addEventListener('input', (e) => puppetScales.head = parseFloat(e.target.value));
+  sliderTorso.addEventListener('input', (e) => puppetScales.torso = parseFloat(e.target.value));
+  sliderArms.addEventListener('input', (e) => puppetScales.arms = parseFloat(e.target.value));
 
-  canvasElement.addEventListener('mousedown', (e) => {
-    const rect = canvasElement.getBoundingClientRect();
-    const mouseX = rect.width - (e.clientX - rect.left);
-    const mouseY = e.clientY - rect.top;
-
-    if (currentPoints.leftShoulder && Math.hypot(mouseX - currentPoints.leftShoulder.x, mouseY - currentPoints.leftShoulder.y) < 25) {
-      draggingPoint = 'leftShoulder';
-    } else if (currentPoints.rightShoulder && Math.hypot(mouseX - currentPoints.rightShoulder.x, mouseY - currentPoints.rightShoulder.y) < 25) {
-      draggingPoint = 'rightShoulder';
-    }
+  sliderHeadY.addEventListener('input', (e) => {
+    headOffsetY = parseFloat(e.target.value);
+    localStorage.setItem('app_head_offset_y', headOffsetY);
   });
-
-  canvasElement.addEventListener('mousemove', (e) => {
-    if (!draggingPoint || !currentPoints.rawLeftShoulder) return;
-    const rect = canvasElement.getBoundingClientRect();
-    const mouseX = rect.width - (e.clientX - rect.left);
-    const mouseY = e.clientY - rect.top;
-
-    if (draggingPoint === 'leftShoulder') {
-      shoulderOffsets.left.x = mouseX - currentPoints.rawLeftShoulder.x;
-      shoulderOffsets.left.y = mouseY - currentPoints.rawLeftShoulder.y;
-    } else if (draggingPoint === 'rightShoulder') {
-      shoulderOffsets.right.x = mouseX - currentPoints.rawRightShoulder.x;
-      shoulderOffsets.right.y = mouseY - currentPoints.rawRightShoulder.y;
-    }
-    localStorage.setItem('app_shoulder_offsets', JSON.stringify(shoulderOffsets));
+  sliderHeadX.addEventListener('input', (e) => {
+    headOffsetX = parseFloat(e.target.value);
+    localStorage.setItem('app_head_offset_x', headOffsetX);
   });
-
-  window.addEventListener('mouseup', () => { draggingPoint = null; });
 
   resetBtn.addEventListener('click', () => {
     shoulderOffsets = { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } };
@@ -378,7 +356,149 @@
   handleFileInput(inputArmLeft, 'app_file_armLeft', 'armLeft');
   handleFileInput(inputArmRight, 'app_file_armRight', 'armRight');
 
-  // Reîncărcare automată din DB la pornirea aplicației
+  // Multi-layer Rendering Engine
+  function drawLimb2D(img, p1, p2, scaleMult = 1.0) {
+    if (!img || !p1 || !p2) return;
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const distance = Math.hypot(dx, dy);
+    const angle = Math.atan2(dy, dx);
+
+    canvasCtx.save();
+    canvasCtx.translate(p1.x, p1.y);
+    canvasCtx.rotate(angle - Math.PI / 2);
+
+    const w = distance * scaleMult;
+    const h = distance * 1.2;
+    canvasCtx.drawImage(img, -w / 2, 0, w, h);
+    canvasCtx.restore();
+  }
+
+  function drawHead2D(img, nose, leftEar, rightEar) {
+    if (!img || !nose) return;
+    let headSize = 100;
+    let angle = 0;
+
+    if (leftEar && rightEar) {
+      const dx = rightEar.x - leftEar.x;
+      const dy = rightEar.y - leftEar.y;
+      headSize = Math.hypot(dx, dy) * 2.2;
+      angle = Math.atan2(dy, dx);
+    }
+
+    headSize *= puppetScales.head;
+
+    canvasCtx.save();
+    canvasCtx.translate(nose.x + headOffsetX, nose.y + headOffsetY);
+    canvasCtx.rotate(angle);
+    canvasCtx.drawImage(img, -headSize / 2, -headSize / 2, headSize, headSize);
+    canvasCtx.restore();
+  }
+
+  function update3DPart(model, position, scale = 1.0) {
+    if (!model || !position) return;
+    model.position.set(position.x, window.innerHeight - position.y, 0);
+    model.scale.set(scale * 50, scale * 50, scale * 50);
+  }
+
+  // Camera & MediaPipe Holistic Loop
+  function onResults(results) {
+    canvasCtx.save();
+    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+    // Fundal Video / Custom
+    if (results.segmentationMask && enableCrop) {
+      maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+      maskCtx.drawImage(results.segmentationMask, 0, 0, maskCanvas.width, maskCanvas.height);
+      
+      canvasCtx.drawImage(maskCanvas, 0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.globalCompositeOperation = 'source-in';
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.globalCompositeOperation = 'source-over';
+    } else {
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+    }
+
+    if (results.poseLandmarks) {
+      const lm = results.poseLandmarks;
+      const w = canvasElement.width;
+      const h = canvasElement.height;
+
+      const nose = { x: lm[0].x * w, y: lm[0].y * h };
+      const leftEar = { x: lm[7].x * w, y: lm[7].y * h };
+      const rightEar = { x: lm[8].x * w, y: lm[8].y * h };
+
+      const leftShoulder = { x: lm[11].x * w + shoulderOffsets.left.x, y: lm[11].y * h + shoulderOffsets.left.y };
+      const rightShoulder = { x: lm[12].x * w + shoulderOffsets.right.x, y: lm[12].y * h + shoulderOffsets.right.y };
+      const leftElbow = { x: lm[13].x * w, y: lm[13].y * h };
+      const rightElbow = { x: lm[14].x * w, y: lm[14].y * h };
+      const leftWrist = { x: lm[15].x * w, y: lm[15].y * h };
+      const rightWrist = { x: lm[16].x * w, y: lm[16].y * h };
+
+      // Render 2D sau Pozitionare 3D
+      if (partVis.head) {
+        if (puppetAssets.head.type === '2d') drawHead2D(puppetAssets.head.data, nose, leftEar, rightEar);
+        else if (puppetAssets.head.type === '3d') update3DPart(puppetAssets.head.data, nose, puppetScales.head);
+      }
+
+      if (partVis.torso) {
+        if (puppetAssets.torso.type === '2d') drawLimb2D(puppetAssets.torso.data, leftShoulder, rightShoulder, puppetScales.torso);
+        else if (puppetAssets.torso.type === '3d') update3DPart(puppetAssets.torso.data, leftShoulder, puppetScales.torso);
+      }
+
+      if (partVis.armLeft) {
+        if (puppetAssets.armLeft.type === '2d') drawLimb2D(puppetAssets.armLeft.data, leftShoulder, leftElbow, puppetScales.arms);
+        else if (puppetAssets.armLeft.type === '3d') update3DPart(puppetAssets.armLeft.data, leftShoulder, puppetScales.arms);
+      }
+
+      if (partVis.armRight) {
+        if (puppetAssets.armRight.type === '2d') drawLimb2D(puppetAssets.armRight.data, rightShoulder, rightElbow, puppetScales.arms);
+        else if (puppetAssets.armRight.type === '3d') update3DPart(puppetAssets.armRight.data, rightShoulder, puppetScales.arms);
+      }
+
+      // Skeleton Overlay
+      if (showSkeleton) {
+        drawConnectors(canvasCtx, results.poseLandmarks, HOLISTIC_POSE_CONNECTIONS, { color: '#00FFCC', lineWidth: 2 });
+        drawLandmarks(canvasCtx, results.poseLandmarks, { color: '#FF0055', lineWidth: 1, radius: 3 });
+      }
+    }
+
+    canvasCtx.restore();
+    threeRenderer.render(threeScene, threeCamera);
+  }
+
+  // Pornire MediaPipe Holistic Engine
+  const holistic = new Holistic({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`
+  });
+
+  holistic.setOptions({
+    modelComplexity: 1,
+    smoothLandmarks: true,
+    enableSegmentation: true,
+    smoothSegmentation: true,
+    refineFaceLandmarks: true
+  });
+
+  holistic.onResults(onResults);
+
+  let cameraInstance = null;
+
+  startBtn.addEventListener('click', async () => {
+    statusDiv.innerText = "Se pornește camera...";
+    cameraInstance = new Camera(videoElement, {
+      onFrame: async () => {
+        await holistic.send({ image: videoElement });
+      },
+      width: 1280,
+      height: 720
+    });
+    await cameraInstance.start();
+    statusDiv.innerText = "Sistem Activ. Urmărire Pornește...";
+    startBtn.style.display = "none";
+  });
+
+  // Reîncărcare automată asset-uri din DB
   window.addEventListener('load', async () => {
     const parts = [
       { key: 'head', db: 'app_file_head' },
@@ -393,8 +513,7 @@
         loadPartAsset(p.key, stored.blob, stored.fileType === '3d');
       }
     }
-
-    updateBtnState(togHeadBtn, partVis.head, "Cap");
-    updateBtnState(togTorsoBtn, partVis.torso, "Torso");
-    updateBtnState(togArmLeftBtn, partVis.armLeft, "Braț L");
-    updateBtnState(togArmRightBtn, partVis
+  });
+</script>
+</body>
+</html>
