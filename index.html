@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>2D Puppet Rigging - v2.2 Free-Form & Drag Adjustment</title>
+  <title>2D & 3D Puppet Rigging - v2.3 PNG + GLB Dual Engine</title>
   <style>
     * {
       box-sizing: border-box;
@@ -48,7 +48,7 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
-      width: 360px;
+      width: 370px;
       max-height: 92vh;
       overflow-y: auto;
       background: rgba(15, 15, 25, 0.92);
@@ -140,15 +140,20 @@
     }
   </style>
 
+  <!-- MediaPipe -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  
+  <!-- Three.js pentru Renderare Modele 3D GLB/GLTF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 <body>
 
 <div id="container">
   <div id="ui-overlay">
-    <button id="start-btn" class="btn-main">▶️️ Pornire Puppet Rig v2.2</button>
+    <button id="start-btn" class="btn-main">▶ Pornire Engine 2D/3D v2.3</button>
     <div id="status">Apasă pe buton pentru start...</div>
 
     <!-- Switchuri Globale Layer-e -->
@@ -161,40 +166,40 @@
       </div>
     </div>
 
-    <!-- Upload & ON/OFF pe Fiecare Fragment PNG -->
+    <!-- Upload PNG & GLB pe Fiecare Fragment -->
     <div class="upload-group">
-      <label>Încărcare & Comutatoare Elemente PNG</label>
+      <label>Încărcare Fișiere (PNG / JPG / GLB / GLTF)</label>
       
       <!-- 1. CAP -->
       <div class="item-row">
         <button id="tog-head" class="btn-toggle active">Cap: ON</button>
-        <input type="file" id="png-head" accept="image/png,image/*" class="file-input">
+        <input type="file" id="file-head" accept="image/*,.glb,.gltf" class="file-input">
       </div>
 
       <!-- 2. TORSO -->
       <div class="item-row">
         <button id="tog-torso" class="btn-toggle active">Torso: ON</button>
-        <input type="file" id="png-torso" accept="image/png,image/*" class="file-input">
+        <input type="file" id="file-torso" accept="image/*,.glb,.gltf" class="file-input">
       </div>
 
       <!-- 3. BRAȚ STÂNG -->
       <div class="item-row">
         <button id="tog-arm-left" class="btn-toggle active">Braț L: ON</button>
-        <input type="file" id="png-arm-left" accept="image/png,image/*" class="file-input">
+        <input type="file" id="file-arm-left" accept="image/*,.glb,.gltf" class="file-input">
       </div>
 
       <!-- 4. BRAȚ DREPT -->
       <div class="item-row">
         <button id="tog-arm-right" class="btn-toggle active">Braț R: ON</button>
-        <input type="file" id="png-arm-right" accept="image/png,image/*" class="file-input">
+        <input type="file" id="file-arm-right" accept="image/*,.glb,.gltf" class="file-input">
       </div>
     </div>
 
     <!-- Ajustări Free-Form Mască / Cap -->
     <div class="upload-group">
-      <label>Calibrare Free-Form Mască (Poziție & Scală)</label>
+      <label>Calibrare Free-Form Cap (Scală & Offsets)</label>
       <div class="scale-controls">
-        <span>Scală:</span>
+        <span>Scală Cap:</span>
         <input type="range" id="scale-head" min="0.3" max="3.0" step="0.05" value="1.0">
       </div>
       <div class="scale-controls">
@@ -252,14 +257,14 @@
   const togArmLeftBtn = document.getElementById('tog-arm-left');
   const togArmRightBtn = document.getElementById('tog-arm-right');
 
-  // Inputs Fragmente
-  const inputHead = document.getElementById('png-head');
-  const inputTorso = document.getElementById('png-torso');
-  const inputArmLeft = document.getElementById('png-arm-left');
-  const inputArmRight = document.getElementById('png-arm-right');
+  // Inputs
+  const inputHead = document.getElementById('file-head');
+  const inputTorso = document.getElementById('file-torso');
+  const inputArmLeft = document.getElementById('file-arm-left');
+  const inputArmRight = document.getElementById('file-arm-right');
   const bgFileUpload = document.getElementById('bg-file-upload');
 
-  // Sliders Free-Form
+  // Sliders
   const sliderHead = document.getElementById('scale-head');
   const sliderHeadY = document.getElementById('offset-head-y');
   const sliderHeadX = document.getElementById('offset-head-x');
@@ -277,7 +282,6 @@
     armRight: localStorage.getItem('app_vis_armRight') !== 'false'
   };
 
-  // Offsets Calibrare Umeri & Head (Ajustate prin Drag / Sliders)
   let shoulderOffsets = JSON.parse(localStorage.getItem('app_shoulder_offsets')) || {
     left: { x: 0, y: 0 },
     right: { x: 0, y: 0 }
@@ -292,8 +296,30 @@
   let bgType = 'none';
   let customBgImg = null;
 
-  const puppetImages = { head: null, torso: null, armLeft: null, armRight: null };
+  // Stocare Active (Suportă 2D & 3D)
+  const puppetAssets = {
+    head: { type: null, data: null },
+    torso: { type: null, data: null },
+    armLeft: { type: null, data: null },
+    armRight: { type: null, data: null }
+  };
+
   const puppetScales = { head: 1.0, torso: 1.0, arms: 1.0 };
+
+  // Three.js Offscreen Scene pentru renderare modele 3D
+  const threeScene = new THREE.Scene();
+  const threeCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000);
+  threeCamera.position.z = 5;
+  const threeRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  threeRenderer.setSize(window.innerWidth, window.innerHeight);
+
+  const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+  threeScene.add(ambientLight);
+  const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  dirLight.position.set(0, 1, 2);
+  threeScene.add(dirLight);
+
+  const gltfLoader = new THREE.GLTFLoader();
 
   const maskCanvas = document.createElement('canvas');
   const maskCtx = maskCanvas.getContext('2d');
@@ -303,17 +329,22 @@
     canvasElement.height = window.innerHeight;
     maskCanvas.width = window.innerWidth;
     maskCanvas.height = window.innerHeight;
+    threeRenderer.setSize(window.innerWidth, window.innerHeight);
+    threeCamera.left = -window.innerWidth / 2;
+    threeCamera.right = window.innerWidth / 2;
+    threeCamera.top = window.innerHeight / 2;
+    threeCamera.bottom = -window.innerHeight / 2;
+    threeCamera.updateProjectionMatrix();
   }
   window.addEventListener('resize', resizeCanvas);
   resizeCanvas();
 
-  // Drag and Drop pe Canvas pentru Punctele Umerilor
-  let draggingPoint = null; // 'leftShoulder' sau 'rightShoulder'
+  // Mouse Drag for Shoulder Calibration
+  let draggingPoint = null;
   let currentPoints = {};
 
   canvasElement.addEventListener('mousedown', (e) => {
     const rect = canvasElement.getBoundingClientRect();
-    // Inversăm coordonata X deoarece canvas-ul este oglindit (scaleX(-1))
     const mouseX = rect.width - (e.clientX - rect.left);
     const mouseY = e.clientY - rect.top;
 
@@ -326,7 +357,6 @@
 
   canvasElement.addEventListener('mousemove', (e) => {
     if (!draggingPoint || !currentPoints.rawLeftShoulder) return;
-
     const rect = canvasElement.getBoundingClientRect();
     const mouseX = rect.width - (e.clientX - rect.left);
     const mouseY = e.clientY - rect.top;
@@ -338,13 +368,11 @@
       shoulderOffsets.right.x = mouseX - currentPoints.rawRightShoulder.x;
       shoulderOffsets.right.y = mouseY - currentPoints.rawRightShoulder.y;
     }
-
     localStorage.setItem('app_shoulder_offsets', JSON.stringify(shoulderOffsets));
   });
 
   window.addEventListener('mouseup', () => { draggingPoint = null; });
 
-  // Reset Calibrare
   resetBtn.addEventListener('click', () => {
     shoulderOffsets = { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } };
     headOffsetY = 0; headOffsetX = 0;
@@ -355,36 +383,62 @@
     statusDiv.innerText = "Calibrare resatată!";
   });
 
-  // Load / Save Handlers
-  function saveImageToStorage(key, imgDataUrl) { try { localStorage.setItem(key, imgDataUrl); } catch(e){} }
-  function loadImage(src, callback) { if(!src) return; const img = new Image(); img.onload = () => callback(img); img.src = src; }
-
+  // Încărcător Universal (PNG 2D & GLB 3D)
   function handleFileInput(inputEl, storageKey, objKey) {
     inputEl.addEventListener('change', (e) => {
       const file = e.target.files[0];
-      if (file) {
-        const reader = new FileReader();
+      if (!file) return;
+
+      const fileName = file.name.toLowerCase();
+      const reader = new FileReader();
+
+      if (fileName.endsWith('.glb') || fileName.endsWith('.gltf')) {
+        reader.onload = (event) => {
+          const arrayBuffer = event.target.result;
+          gltfLoader.parse(arrayBuffer, '', (gltf) => {
+            if (puppetAssets[objKey].data && puppetAssets[objKey].type === '3d') {
+              threeScene.remove(puppetAssets[objKey].data);
+            }
+            const model = gltf.scene;
+            threeScene.add(model);
+            puppetAssets[objKey] = { type: '3d', data: model };
+            statusDiv.innerText = `Model 3D GLB încărcat pt ${objKey}!`;
+          });
+        };
+        reader.readAsArrayBuffer(file);
+      } else {
         reader.onload = (event) => {
           const dataUrl = event.target.result;
-          loadImage(dataUrl, (img) => { puppetImages[objKey] = img; });
-          saveImageToStorage(storageKey, dataUrl);
-          statusDiv.innerText = `Fragment ${objKey} încărcat!`;
+          const img = new Image();
+          img.onload = () => {
+            if (puppetAssets[objKey].data && puppetAssets[objKey].type === '3d') {
+              threeScene.remove(puppetAssets[objKey].data);
+            }
+            puppetAssets[objKey] = { type: '2d', data: img };
+            statusDiv.innerText = `Imagine 2D încărcată pt ${objKey}!`;
+          };
+          img.src = dataUrl;
+          try { localStorage.setItem(storageKey, dataUrl); } catch(e){}
         };
         reader.readAsDataURL(file);
       }
     });
   }
 
-  handleFileInput(inputHead, 'app_png_head', 'head');
-  handleFileInput(inputTorso, 'app_png_torso', 'torso');
-  handleFileInput(inputArmLeft, 'app_png_arm_left', 'armLeft');
-  handleFileInput(inputArmRight, 'app_png_arm_right', 'armRight');
+  handleFileInput(inputHead, 'app_file_head', 'head');
+  handleFileInput(inputTorso, 'app_file_torso', 'torso');
+  handleFileInput(inputArmLeft, 'app_file_arm_left', 'armLeft');
+  handleFileInput(inputArmRight, 'app_file_arm_right', 'armRight');
 
   window.addEventListener('load', () => {
     ['head', 'torso', 'arm_left', 'arm_right'].forEach(part => {
-      const saved = localStorage.getItem(`app_png_${part}`);
+      const saved = localStorage.getItem(`app_file_${part}`);
       const keyMap = { head: 'head', torso: 'torso', arm_left: 'armLeft', arm_right: 'armRight' };
-      if (saved) loadImage(saved, (img) => { puppetImages[keyMap[part]] = img; });
+      if (saved) {
+        const img = new Image();
+        img.onload = () => puppetAssets[keyMap[part]] = { type: '2d', data: img };
+        img.src = saved;
+      }
     });
 
     updateBtnState(togHeadBtn, partVis.head, "Cap");
@@ -424,14 +478,8 @@
   sliderTorso.addEventListener('input', (e) => puppetScales.torso = parseFloat(e.target.value));
   sliderArms.addEventListener('input', (e) => puppetScales.arms = parseFloat(e.target.value));
 
-  sliderHeadY.addEventListener('input', (e) => {
-    headOffsetY = parseFloat(e.target.value);
-    localStorage.setItem('app_head_offset_y', headOffsetY);
-  });
-  sliderHeadX.addEventListener('input', (e) => {
-    headOffsetX = parseFloat(e.target.value);
-    localStorage.setItem('app_head_offset_x', headOffsetX);
-  });
+  sliderHeadY.addEventListener('input', (e) => { headOffsetY = parseFloat(e.target.value); localStorage.setItem('app_head_offset_y', headOffsetY); });
+  sliderHeadX.addEventListener('input', (e) => { headOffsetX = parseFloat(e.target.value); localStorage.setItem('app_head_offset_x', headOffsetX); });
 
   bgFileUpload.addEventListener('change', (e) => {
     const file = e.target.files[0];
@@ -439,7 +487,9 @@
     if (file.type.startsWith('image/')) {
       bgType = 'image';
       bgVideoElement.pause();
-      loadImage(URL.createObjectURL(file), (img) => customBgImg = img);
+      const img = new Image();
+      img.onload = () => customBgImg = img;
+      img.src = URL.createObjectURL(file);
     } else if (file.type.startsWith('video/')) {
       bgType = 'video';
       bgVideoElement.src = URL.createObjectURL(file);
@@ -447,6 +497,7 @@
     }
   });
 
+  // Renderare Segment 2D
   function drawBoneSegment(ctx, img, p1, p2, scaleFactor = 1.0) {
     if (!img) return;
     const dx = p2.x - p1.x;
@@ -462,6 +513,21 @@
     const drawWidth = (img.height * (drawLength / img.width)) * scaleFactor;
     ctx.drawImage(img, 0, -drawWidth / 2, drawLength, drawWidth);
     ctx.restore();
+  }
+
+  // Renderare Model 3D pe Pozitie Canvas
+  function render3DAsset(model, x, y, scale, rotZ = 0) {
+    if (!model) return;
+    const w = canvasElement.width;
+    const h = canvasElement.height;
+    
+    // Convertește coordonatele de pixel în coordonate Three.js Orthographic
+    const threeX = x - w / 2;
+    const threeY = -(y - h / 2);
+
+    model.position.set(threeX, threeY, 0);
+    model.scale.set(scale * 50, scale * 50, scale * 50);
+    model.rotation.z = rotZ;
   }
 
   // MediaPipe Setup
@@ -493,14 +559,13 @@
       canvasCtx.drawImage(results.image, 0, 0, w, h);
     }
 
-    // 2. TRACKING & CALIBRARE
+    // 2. TRACKING & ANCORARE DUAL ENGINE (2D + 3D)
     if (results.poseLandmarks) {
       const lm = results.poseLandmarks;
 
       const rawLeftShoulder = { x: lm[11].x * w, y: lm[11].y * h };
       const rawRightShoulder = { x: lm[12].x * w, y: lm[12].y * h };
 
-      // Aplicăm Offsets Manuale setate cu Mouse-ul
       const pts = {
         nose:          { x: lm[0].x * w + headOffsetX,  y: lm[0].y * h + headOffsetY },
         leftShoulder:  { x: rawLeftShoulder.x + shoulderOffsets.left.x, y: rawLeftShoulder.y + shoulderOffsets.left.y },
@@ -513,30 +578,52 @@
         rightHip:      { x: lm[24].x * w, y: lm[24].y * h }
       };
 
-      currentPoints = {
-        ...pts,
-        rawLeftShoulder,
-        rawRightShoulder
-      };
-
+      currentPoints = { ...pts, rawLeftShoulder, rawRightShoulder };
       const shoulderWidth = Math.hypot(pts.rightShoulder.x - pts.leftShoulder.x, pts.rightShoulder.y - pts.leftShoulder.y);
 
-      // --- RENDERE ELEMENTE PNG ---
-      if (partVis.torso && puppetImages.torso) {
+      let has3D = false;
+
+      // A. CAP (2D sau 3D)
+      if (partVis.head && puppetAssets.head.data) {
+        if (puppetAssets.head.type === '2d') {
+          const headW = shoulderWidth * 1.2 * puppetScales.head;
+          const headH = (puppetAssets.head.data.height / puppetAssets.head.data.width) * headW;
+          canvasCtx.drawImage(puppetAssets.head.data, pts.nose.x - headW/2, pts.nose.y - headH/2, headW, headH);
+        } else if (puppetAssets.head.type === '3d') {
+          render3DAsset(puppetAssets.head.data, pts.nose.x, pts.nose.y, puppetScales.head);
+          has3D = true;
+        }
+      }
+
+      // B. TORSO (2D sau 3D)
+      if (partVis.torso && puppetAssets.torso.data) {
         const chestCenter = { x: (pts.leftShoulder.x + pts.rightShoulder.x)/2, y: (pts.leftShoulder.y + pts.leftHip.y)/2 };
-        const torsoW = shoulderWidth * 1.6 * puppetScales.torso;
-        const torsoH = (puppetImages.torso.height / puppetImages.torso.width) * torsoW;
-        canvasCtx.drawImage(puppetImages.torso, chestCenter.x - torsoW/2, chestCenter.y - torsoH/2, torsoW, torsoH);
+        if (puppetAssets.torso.type === '2d') {
+          const torsoW = shoulderWidth * 1.6 * puppetScales.torso;
+          const torsoH = (puppetAssets.torso.data.height / puppetAssets.torso.data.width) * torsoW;
+          canvasCtx.drawImage(puppetAssets.torso.data, chestCenter.x - torsoW/2, chestCenter.y - torsoH/2, torsoW, torsoH);
+        } else if (puppetAssets.torso.type === '3d') {
+          render3DAsset(puppetAssets.torso.data, chestCenter.x, chestCenter.y, puppetScales.torso);
+          has3D = true;
+        }
       }
 
-      if (partVis.head && puppetImages.head) {
-        const headW = shoulderWidth * 1.2 * puppetScales.head;
-        const headH = (puppetImages.head.height / puppetImages.head.width) * headW;
-        canvasCtx.drawImage(puppetImages.head, pts.nose.x - headW/2, pts.nose.y - headH/2, headW, headH);
+      // C. BRAȚE (2D sau 3D)
+      if (partVis.armLeft && puppetAssets.armLeft.data) {
+        if (puppetAssets.armLeft.type === '2d') drawBoneSegment(canvasCtx, puppetAssets.armLeft.data, pts.leftShoulder, pts.leftElbow, puppetScales.arms);
+        else if (puppetAssets.armLeft.type === '3d') { render3DAsset(puppetAssets.armLeft.data, pts.leftShoulder.x, pts.leftShoulder.y, puppetScales.arms); has3D = true; }
       }
 
-      if (partVis.armLeft && puppetImages.armLeft) drawBoneSegment(canvasCtx, puppetImages.armLeft, pts.leftShoulder, pts.leftElbow, puppetScales.arms);
-      if (partVis.armRight && puppetImages.armRight) drawBoneSegment(canvasCtx, puppetImages.armRight, pts.rightShoulder, pts.rightElbow, puppetScales.arms);
+      if (partVis.armRight && puppetAssets.armRight.data) {
+        if (puppetAssets.armRight.type === '2d') drawBoneSegment(canvasCtx, puppetAssets.armRight.data, pts.rightShoulder, pts.rightElbow, puppetScales.arms);
+        else if (puppetAssets.armRight.type === '3d') { render3DAsset(puppetAssets.armRight.data, pts.rightShoulder.x, pts.rightShoulder.y, puppetScales.arms); has3D = true; }
+      }
+
+      // Suprapunere Render 3D peste Canvas
+      if (has3D) {
+        threeRenderer.render(threeScene, threeCamera);
+        canvasCtx.drawImage(threeRenderer.domElement, 0, 0);
+      }
 
       // --- SKELETON & DRAG HANDLES ---
       if (showSkeleton) {
@@ -560,7 +647,7 @@
         canvasCtx.lineWidth = 2;
         canvasCtx.stroke();
 
-        // Brațe
+        // Linii Brațe
         const arms = [
           [pts.leftShoulder, pts.leftElbow], [pts.leftElbow, pts.leftWrist],
           [pts.rightShoulder, pts.rightElbow], [pts.rightElbow, pts.rightWrist]
@@ -574,7 +661,7 @@
           canvasCtx.stroke();
         });
 
-        // Articulații Normale
+        // Articulații
         Object.values(pts).forEach((p) => {
           canvasCtx.beginPath();
           canvasCtx.arc(p.x, p.y, 5, 0, 2 * Math.PI);
@@ -583,7 +670,7 @@
           canvasCtx.stroke();
         });
 
-        // HIGHLIGHT SPECIAL PENTRU PUNCTELE MUTABILE DE PE UMERI (CLICK & DRAG)
+        // PUNCTE DRAG & DROP UMERI
         [pts.leftShoulder, pts.rightShoulder].forEach((p) => {
           canvasCtx.beginPath();
           canvasCtx.arc(p.x, p.y, 10, 0, 2 * Math.PI);
@@ -614,7 +701,7 @@
       height: 720
     });
     await camera.start();
-    statusDiv.innerText = "v2.2 Activ • Poți muta punctele de pe umeri cu Mouse-ul!";
+    statusDiv.innerText = "v2.3 Activ • Suport 2D PNG & 3D GLB Pregătit!";
   });
 </script>
 
