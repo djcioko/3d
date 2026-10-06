@@ -151,7 +151,10 @@
 
     <div class="upload-group">
       <label>Fundal Custom (Foto / Video)</label>
-      <input type="file" id="bg-file-upload" accept="image/*,video/*" class="file-input">
+      <div class="item-row">
+        <button id="tog-bg" class="btn-toggle active">Fundal: ON</button>
+        <input type="file" id="bg-file-upload" accept="image/*,video/*" class="file-input">
+      </div>
     </div>
   </div>
 
@@ -189,6 +192,7 @@
   const togTorsoBtn = document.getElementById('tog-torso');
   const togArmLeftBtn = document.getElementById('tog-arm-left');
   const togArmRightBtn = document.getElementById('tog-arm-right');
+  const togBgBtn = document.getElementById('tog-bg');
 
   const inputHead = document.getElementById('file-head');
   const inputTorso = document.getElementById('file-torso');
@@ -207,6 +211,7 @@
   let enableCrop = localStorage.getItem('app_crop') !== 'false';
   let hideCamera = localStorage.getItem('app_hide_camera') === 'true';
   let show3D = localStorage.getItem('app_vis_3d') !== 'false';
+  let showBg = localStorage.getItem('app_vis_bg') !== 'false';
 
   const partVis = {
     head: localStorage.getItem('app_vis_head') !== 'false',
@@ -408,6 +413,7 @@
     updateBtnState(toggleCropBtn, enableCrop, "Crop AI");
     updateBtnState(toggleHideCamBtn, !hideCamera, "Camera", "SHOW", "HIDE");
     updateBtnState(tog3DBtn, show3D, "Model 3D");
+    updateBtnState(togBgBtn, showBg, "Fundal");
   });
 
   function updateBtnState(btn, state, label, onTxt = "ON", offTxt = "OFF") {
@@ -422,6 +428,7 @@
         if (key === 'crop') { enableCrop = !enableCrop; localStorage.setItem('app_crop', enableCrop); updateBtnState(btn, enableCrop, label); }
         if (key === 'hideCam') { hideCamera = !hideCamera; localStorage.setItem('app_hide_camera', hideCamera); updateBtnState(btn, !hideCamera, label, "SHOW", "HIDE"); }
         if (key === 'show3d') { show3D = !show3D; localStorage.setItem('app_vis_3d', show3D); updateBtnState(btn, show3D, label); }
+        if (key === 'showBg') { showBg = !showBg; localStorage.setItem('app_vis_bg', showBg); updateBtnState(btn, showBg, label); }
       } else {
         partVis[key] = !partVis[key];
         localStorage.setItem(`app_vis_${key}`, partVis[key]);
@@ -438,6 +445,7 @@
   bindToggle(toggleCropBtn, 'crop', 'Crop AI', true);
   bindToggle(toggleHideCamBtn, 'hideCam', 'Camera', true);
   bindToggle(tog3DBtn, 'show3d', 'Model 3D', true);
+  bindToggle(togBgBtn, 'showBg', 'Fundal', true);
 
   sliderHead.addEventListener('input', (e) => puppetScales.head = parseFloat(e.target.value));
   sliderArms.addEventListener('input', (e) => puppetScales.arms = parseFloat(e.target.value));
@@ -554,8 +562,8 @@
     canvasCtx.clearRect(0, 0, w, h);
 
     if (hideCamera) {
-      if (bgType === 'image' && customBgImg) canvasCtx.drawImage(customBgImg, 0, 0, w, h);
-      else if (bgType === 'video' && bgVideoElement.readyState >= 2) canvasCtx.drawImage(bgVideoElement, 0, 0, w, h);
+      if (showBg && bgType === 'image' && customBgImg) canvasCtx.drawImage(customBgImg, 0, 0, w, h);
+      else if (showBg && bgType === 'video' && bgVideoElement.readyState >= 2) canvasCtx.drawImage(bgVideoElement, 0, 0, w, h);
       else { canvasCtx.fillStyle = '#08080c'; canvasCtx.fillRect(0, 0, w, h); }
     } else if (enableCrop && results.segmentationMask) {
       maskCtx.save();
@@ -566,8 +574,8 @@
       maskCtx.drawImage(results.image, 0, 0, w, h);
       maskCtx.restore();
 
-      if (bgType === 'image' && customBgImg) canvasCtx.drawImage(customBgImg, 0, 0, w, h);
-      else if (bgType === 'video' && bgVideoElement.readyState >= 2) canvasCtx.drawImage(bgVideoElement, 0, 0, w, h);
+      if (showBg && bgType === 'image' && customBgImg) canvasCtx.drawImage(customBgImg, 0, 0, w, h);
+      else if (showBg && bgType === 'video' && bgVideoElement.readyState >= 2) canvasCtx.drawImage(bgVideoElement, 0, 0, w, h);
       else { canvasCtx.fillStyle = '#08080c'; canvasCtx.fillRect(0, 0, w, h); }
 
       canvasCtx.drawImage(maskCanvas, 0, 0, w, h);
