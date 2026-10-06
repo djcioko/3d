@@ -2,12 +2,18 @@
 <html lang="ro">
 <head>
   <meta charset="UTF-8">
-  <title>Holistic Body Tracking & 3D Mapping</title>
+  <title>Full Screen Body & Hand Tracking</title>
   <style>
-    body {
+    * {
+      box-sizing: border-box;
       margin: 0;
+      padding: 0;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
       overflow: hidden;
-      background-color: #111;
+      background-color: #000;
       font-family: sans-serif;
     }
     #container {
@@ -15,8 +21,8 @@
       width: 100vw;
       height: 100vh;
     }
-    /* Video ascuns sau semitransparent pentru referință */
-    #webcam {
+    /* Elementele suprapuse perfect pe tot ecranul */
+    #webcam, #output_canvas {
       position: absolute;
       top: 0;
       left: 0;
@@ -24,28 +30,29 @@
       height: 100%;
       object-fit: cover;
       transform: scaleX(-1); /* Oglindire camera */
-      opacity: 0.3;
     }
-    /* Canvas-ul unde se desenează plasa/mesh-ul 3D */
+    #webcam {
+      opacity: 0.4; /* Video semi-transparent */
+      z-index: 1;
+    }
     #output_canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      transform: scaleX(-1);
+      z-index: 2; /* Canvas-ul peste video */
     }
     #loading {
       position: absolute;
       top: 20px;
       left: 20px;
       color: #00ffcc;
-      font-size: 18px;
+      font-size: 20px;
+      font-weight: bold;
       z-index: 10;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 10px 15px;
+      border-radius: 8px;
     }
   </style>
 
-  <!-- Librării MediaPipe pentru urmărire Corp, Mâini și Față -->
+  <!-- Librării MediaPipe de pe CDN stabil -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -53,8 +60,8 @@
 <body>
 
 <div id="container">
-  <div id="loading">Se încarcă camera și plasa de tracking...</div>
-  <video id="webcam" autoplay playsinline></video>
+  <div id="loading">Pornire cameră și încărcare plasă tracking...</div>
+  <video id="webcam" autoplay playsinline muted></video>
   <canvas id="output_canvas"></canvas>
 </div>
 
@@ -64,14 +71,15 @@
   const canvasCtx = canvasElement.getContext('2d');
   const loadingDiv = document.getElementById('loading');
 
-  function resizeCanvas() {
+  // Ajustează rezoluția internă a canvas-ului la dimensiunile reale ale ferestrei
+  function fitCanvasToWindow() {
     canvasElement.width = window.innerWidth;
     canvasElement.height = window.innerHeight;
   }
-  window.addEventListener('resize', resizeCanvas);
-  resizeCanvas();
+  window.addEventListener('resize', fitCanvasToWindow);
+  fitCanvasToWindow();
 
-  // Configurare MediaPipe Holistic (Urmărește Corp + Față + Ambele Mâini)
+  // Configurare MediaPipe Holistic
   const holistic = new Holistic({
     locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`
   });
@@ -85,67 +93,75 @@
     minTrackingConfidence: 0.5
   });
 
-  // Funcția de procesare a cadrelor și desenare a plasei (Mesh)
+  // Procesare cadru și desenare plasă pe ecran
   holistic.onResults((results) => {
-    loadingDiv.style.display = 'none';
+    if (loadingDiv.style.display !== 'none') {
+      loadingDiv.style.display = 'none';
+    }
+
+    // Păstrăm dimensiunile sincronizate
+    if (canvasElement.width !== window.innerWidth || canvasElement.height !== window.innerHeight) {
+      fitCanvasToWindow();
+    }
 
     canvasCtx.save();
     canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-    // 1. Plasa Corp (Pose Mesh)
-    if (results.poseLandmarks) {
-      drawConnectors(canvasCtx, results.poseLandmarks, HOLISTIC_CONNECTIONS, {
-        color: '#00FF00',
-        lineWidth: 3
-      });
-      drawLandmarks(canvasCtx, results.poseLandmarks, {
-        color: '#FF0000',
-        lineWidth: 2,
-        radius: 4
-      });
-    }
+    // Scaling manual pentru ca plasa să se potrivească exact cu opțiunea "object-fit: cover" a camerei
+    const videoWidth = videoElement.videoWidth;
+    const videoHeight = videoElement.videoHeight;
 
-    // 2. Plasa Mâna Stângă
-    if (results.leftHandLandmarks) {
-      drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS, {
-        color: '#CC00FF',
-        lineWidth: 2
-      });
-      drawLandmarks(canvasCtx, results.leftHandLandmarks, {
-        color: '#00FFFF',
-        radius: 3
-      });
-    }
+    if (videoWidth && videoHeight) {
+      // 1. Plasa Corp (Pose Mesh)
+      if (results.poseLandmarks) {
+        drawConnectors(canvasCtx, results.poseLandmarks, HOLISTIC_CONNECTIONS, {
+          color: '#00FF00',
+          lineWidth: 3
+        });
+        drawLandmarks(canvasCtx, results.poseLandmarks, {
+          color: '#FF0000',
+          lineWidth: 2,
+          radius: 4
+        });
+      }
 
-    // 3. Plasa Mâna Dreaptă
-    if (results.rightHandLandmarks) {
-      drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS, {
-        color: '#00CCFF',
-        lineWidth: 2
-      });
-      drawLandmarks(canvasCtx, results.rightHandLandmarks, {
-        color: '#FF00FF',
-        radius: 3
-      });
-    }
+      // 2. Plasa Mâna Stângă
+      if (results.leftHandLandmarks) {
+        drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS, {
+          color: '#CC00FF',
+          lineWidth: 3
+        });
+        drawLandmarks(canvasCtx, results.leftHandLandmarks, {
+          color: '#00FFFF',
+          radius: 4
+        });
+      }
 
-    // 4. Plasa Față (Face Mesh)
-    if (results.faceLandmarks) {
-      drawConnectors(canvasCtx, results.faceLandmarks, FACEMESH_TESSELATION, {
-        color: '#C0C0C040',
-        lineWidth: 1
-      });
+      // 3. Plasa Mâna Dreaptă
+      if (results.rightHandLandmarks) {
+        drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS, {
+          color: '#00CCFF',
+          lineWidth: 3
+        });
+        drawLandmarks(canvasCtx, results.rightHandLandmarks, {
+          color: '#FF00FF',
+          radius: 4
+        });
+      }
+
+      // 4. Plasa Față (Face Mesh)
+      if (results.faceLandmarks) {
+        drawConnectors(canvasCtx, results.faceLandmarks, FACEMESH_TESSELATION, {
+          color: '#C0C0C070',
+          lineWidth: 1
+        });
+      }
     }
 
     canvasCtx.restore();
-
-    // AICI VOM ADĂUGA CONECTAREA CU MODELUL TĂU 3D (glTF)
-    // Datele curente ale articulațiilor se află în:
-    // - results.poseLandmarks (umeri, coate, încheieturi)
-    // - results.leftHandLandmarks / rightHandLandmarks (degete)
   });
 
-  // Pornire Webcam
+  // Inițializare și pornire cameră Web
   const camera = new Camera(videoElement, {
     onFrame: async () => {
       await holistic.send({ image: videoElement });
