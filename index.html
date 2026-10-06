@@ -2,7 +2,8 @@
 <html lang="ro">
 <head>
   <meta charset="UTF-8">
-  <title>Full Screen Body & Hand Tracking</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plasă Full Body High-Density Tracking</title>
   <style>
     * {
       box-sizing: border-box;
@@ -10,49 +11,76 @@
       padding: 0;
     }
     html, body {
-      width: 100%;
-      height: 100%;
+      width: 100vw;
+      height: 100vh;
       overflow: hidden;
-      background-color: #000;
-      font-family: sans-serif;
+      background-color: #050505;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
     #container {
       position: relative;
       width: 100vw;
       height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
     }
-    /* Elementele suprapuse perfect pe tot ecranul */
     #webcam, #output_canvas {
       position: absolute;
       top: 0;
       left: 0;
-      width: 100%;
-      height: 100%;
+      width: 100vw;
+      height: 100vh;
       object-fit: cover;
       transform: scaleX(-1); /* Oglindire camera */
     }
     #webcam {
-      opacity: 0.4; /* Video semi-transparent */
+      opacity: 0.25;
       z-index: 1;
     }
     #output_canvas {
-      z-index: 2; /* Canvas-ul peste video */
+      z-index: 2;
     }
-    #loading {
+    /* Control Panel & Controls */
+    #ui-overlay {
       position: absolute;
       top: 20px;
       left: 20px;
-      color: #00ffcc;
-      font-size: 20px;
-      font-weight: bold;
       z-index: 10;
-      background: rgba(0, 0, 0, 0.6);
-      padding: 10px 15px;
-      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .btn-action {
+      background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+      color: #000;
+      border: none;
+      padding: 14px 24px;
+      font-size: 16px;
+      font-weight: bold;
+      border-radius: 30px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(0, 242, 254, 0.4);
+      transition: all 0.3s ease;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .btn-action:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 20px rgba(0, 242, 254, 0.7);
+    }
+    #status {
+      color: #00ffcc;
+      background: rgba(0, 0, 0, 0.75);
+      padding: 8px 15px;
+      border-radius: 20px;
+      font-size: 14px;
+      border: 1px solid rgba(0, 255, 204, 0.3);
+      width: fit-content;
     }
   </style>
 
-  <!-- Librării MediaPipe de pe CDN stabil -->
+  <!-- CDNs MediaPipe -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -60,7 +88,11 @@
 <body>
 
 <div id="container">
-  <div id="loading">Pornire cameră și încărcare plasă tracking...</div>
+  <div id="ui-overlay">
+    <button id="start-btn" class="btn-action">🚀 Lansează Plasa Full Body (Full Screen)</button>
+    <div id="status">Apasă pe buton pentru a inițializa plasa...</div>
+  </div>
+
   <video id="webcam" autoplay playsinline muted></video>
   <canvas id="output_canvas"></canvas>
 </div>
@@ -69,108 +101,114 @@
   const videoElement = document.getElementById('webcam');
   const canvasElement = document.getElementById('output_canvas');
   const canvasCtx = canvasElement.getContext('2d');
-  const loadingDiv = document.getElementById('loading');
+  const startBtn = document.getElementById('start-btn');
+  const statusDiv = document.getElementById('status');
+  const container = document.getElementById('container');
 
-  // Ajustează rezoluția internă a canvas-ului la dimensiunile reale ale ferestrei
-  function fitCanvasToWindow() {
+  let camera = null;
+
+  function resizeCanvas() {
     canvasElement.width = window.innerWidth;
     canvasElement.height = window.innerHeight;
   }
-  window.addEventListener('resize', fitCanvasToWindow);
-  fitCanvasToWindow();
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
 
-  // Configurare MediaPipe Holistic
+  // Configurare MediaPipe Holistic pe complexitate maximă (Puncte ultra dense)
   const holistic = new Holistic({
     locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`
   });
 
   holistic.setOptions({
-    modelComplexity: 1,
+    modelComplexity: 2,          // Maxim de calitate și puncte pe corp
     smoothLandmarks: true,
     enableSegmentation: false,
-    refineFaceLandmarks: true,
+    refineFaceLandmarks: true,   // Adaugă punctele detaliate ale feței/ochilor/buzelor
     minDetectionConfidence: 0.5,
     minTrackingConfidence: 0.5
   });
 
-  // Procesare cadru și desenare plasă pe ecran
   holistic.onResults((results) => {
-    if (loadingDiv.style.display !== 'none') {
-      loadingDiv.style.display = 'none';
-    }
-
-    // Păstrăm dimensiunile sincronizate
-    if (canvasElement.width !== window.innerWidth || canvasElement.height !== window.innerHeight) {
-      fitCanvasToWindow();
-    }
+    statusDiv.innerText = "Plasă activă • Puncte mapate în timp real";
 
     canvasCtx.save();
     canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-    // Scaling manual pentru ca plasa să se potrivească exact cu opțiunea "object-fit: cover" a camerei
-    const videoWidth = videoElement.videoWidth;
-    const videoHeight = videoElement.videoHeight;
+    // 1. Plasa Față Ultra-Densă (~468 puncte / Teselare completă)
+    if (results.faceLandmarks) {
+      drawConnectors(canvasCtx, results.faceLandmarks, FACEMESH_TESSELATION, {
+        color: 'rgba(0, 242, 254, 0.4)',
+        lineWidth: 1
+      });
+      drawLandmarks(canvasCtx, results.faceLandmarks, {
+        color: '#00ffff',
+        radius: 1,
+        lineWidth: 0
+      });
+    }
 
-    if (videoWidth && videoHeight) {
-      // 1. Plasa Corp (Pose Mesh)
-      if (results.poseLandmarks) {
-        drawConnectors(canvasCtx, results.poseLandmarks, HOLISTIC_CONNECTIONS, {
-          color: '#00FF00',
-          lineWidth: 3
-        });
-        drawLandmarks(canvasCtx, results.poseLandmarks, {
-          color: '#FF0000',
-          lineWidth: 2,
-          radius: 4
-        });
-      }
+    // 2. Plasa Corp (Pose Mesh)
+    if (results.poseLandmarks) {
+      drawConnectors(canvasCtx, results.poseLandmarks, HOLISTIC_CONNECTIONS, {
+        color: '#00ff66',
+        lineWidth: 2
+      });
+      drawLandmarks(canvasCtx, results.poseLandmarks, {
+        color: '#ff0055',
+        radius: 4
+      });
+    }
 
-      // 2. Plasa Mâna Stângă
-      if (results.leftHandLandmarks) {
-        drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS, {
-          color: '#CC00FF',
-          lineWidth: 3
-        });
-        drawLandmarks(canvasCtx, results.leftHandLandmarks, {
-          color: '#00FFFF',
-          radius: 4
-        });
-      }
+    // 3. Plasa Mâna Stângă (21 de repere + articulații)
+    if (results.leftHandLandmarks) {
+      drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS, {
+        color: '#ff00ff',
+        lineWidth: 2
+      });
+      drawLandmarks(canvasCtx, results.leftHandLandmarks, {
+        color: '#00ffff',
+        radius: 3
+      });
+    }
 
-      // 3. Plasa Mâna Dreaptă
-      if (results.rightHandLandmarks) {
-        drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS, {
-          color: '#00CCFF',
-          lineWidth: 3
-        });
-        drawLandmarks(canvasCtx, results.rightHandLandmarks, {
-          color: '#FF00FF',
-          radius: 4
-        });
-      }
-
-      // 4. Plasa Față (Face Mesh)
-      if (results.faceLandmarks) {
-        drawConnectors(canvasCtx, results.faceLandmarks, FACEMESH_TESSELATION, {
-          color: '#C0C0C070',
-          lineWidth: 1
-        });
-      }
+    // 4. Plasa Mâna Dreaptă (21 de repere + articulații)
+    if (results.rightHandLandmarks) {
+      drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS, {
+        color: '#ff00ff',
+        lineWidth: 2
+      });
+      drawLandmarks(canvasCtx, results.rightHandLandmarks, {
+        color: '#00ffff',
+        radius: 3
+      });
     }
 
     canvasCtx.restore();
   });
 
-  // Inițializare și pornire cameră Web
-  const camera = new Camera(videoElement, {
-    onFrame: async () => {
-      await holistic.send({ image: videoElement });
-    },
-    width: 1280,
-    height: 720
-  });
+  // Pornire Full Screen + Cameră la apăsarea pe buton
+  startBtn.addEventListener('click', async () => {
+    // Intrare în mod Full Screen
+    if (container.requestFullscreen) {
+      container.requestFullscreen();
+    } else if (container.webkitRequestFullscreen) {
+      container.webkitRequestFullscreen();
+    }
 
-  camera.start();
+    statusDiv.innerText = "Se pornește camera și modelul AI...";
+    startBtn.style.display = 'none';
+
+    if (!camera) {
+      camera = new Camera(videoElement, {
+        onFrame: async () => {
+          await holistic.send({ image: videoElement });
+        },
+        width: 1920,
+        height: 1080
+      });
+      await camera.start();
+    }
+  });
 </script>
 
 </body>
