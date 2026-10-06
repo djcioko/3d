@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>VTuber Studio v3.0 - Full 3D & 2D Features</title>
+  <title>VTuber Studio v3.0 - Full Features</title>
 
   <!-- MediaPipe CDNs -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -180,4 +180,446 @@
       z-index: 5;
     }
 
-    .row { display: flex
+    .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    label { color: #94a3b8; }
+    input[type="range"] { width: 55%; accent-color: #10b981; }
+
+    #status { font-size: 11px; color: #eab308; text-align: center; margin-top: 6px; }
+  </style>
+</head>
+<body>
+
+  <h3>🎭 VTuber Studio <span class="version-tag">v3.0 3D</span></h3>
+
+  <div class="canvas-container" id="canvasContainer">
+    <video id="webcam" playsinline muted></video>
+    <video id="bgVideoElement" loop playsinline muted></video>
+    <canvas id="output_canvas"></canvas>
+  </div>
+
+  <div class="controls-panel">
+    
+    <div class="section-title">📷 SELECTARE CAMERA WEB</div>
+    <select id="cameraSelect" class="select-device">
+      <option value="">Se încarcă camerele...</option>
+    </select>
+
+    <div class="btn-group">
+      <button id="recordBtn" class="btn btn-full btn-record">⏺ Începe Înregistrarea Video (MP4)</button>
+      <button id="toggleShowCam" class="btn">Camera Reală: OFF</button>
+      <button id="toggleBodyTrack" class="btn">Urmărire Corp: OFF</button>
+      <button id="resetTouchBtn" class="btn">Reset Poziție Touch</button>
+      <button id="fullScreenBtn" class="btn btn-full btn-fullscreen">🖥️ Full Screen (Ecran Complet)</button>
+    </div>
+
+    <div class="section-title">📦 MODEL 3D (.GLB / .GLTF)</div>
+    <div class="btn-group">
+      <label class="btn" style="flex: 100%; background: #065f46; border-color: #10b981; color: #fff;">
+        ➕ Upload Model 3D (.GLB)
+        <input type="file" id="glbLoader" accept=".glb,.gltf">
+      </label>
+    </div>
+
+    <div class="section-title">🖼️ / 🎬 FUNDAL SCENĂ</div>
+    <div class="btn-group">
+      <label class="btn" style="flex: 100%;">
+        ➕ Upload Fundal (Foto / Video)
+        <input type="file" id="bgLoader" accept="image/*, video/*" multiple>
+      </label>
+    </div>
+    <div class="gallery" id="bgGallery"></div>
+
+    <div class="section-title">👽 MASCĂ PNG 2D</div>
+    <div class="btn-group">
+      <label class="btn" style="flex: 100%;">
+        ➕ Upload Mască PNG
+        <input type="file" id="avatarLoader" accept="image/*" multiple>
+      </label>
+    </div>
+    <div class="gallery" id="avatarGallery"></div>
+
+    <div class="section-title">⚙️ CALIBRARE MASCĂ 2D / MODEL 3D</div>
+    <div class="row">
+      <label>Scale (Scară / Zoom):</label>
+      <input type="range" id="scaleSlider" min="0.1" max="10" step="0.1" value="1.0">
+    </div>
+    <div class="row">
+      <label>Offset X:</label>
+      <input type="range" id="offsetXSlider" min="-500" max="500" step="1" value="0">
+    </div>
+    <div class="row">
+      <label>Offset Y:</label>
+      <input type="range" id="offsetYSlider" min="-500" max="500" step="1" value="0">
+    </div>
+
+    <div id="status">Se pornește camera web și motorul 3D...</div>
+  </div>
+
+  <script>
+    const videoElement = document.getElementById('webcam');
+    const bgVideoElement = document.getElementById('bgVideoElement');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasContainer = document.getElementById('canvasContainer');
+    const canvasCtx = canvasElement.getContext('2d');
+    const statusEl = document.getElementById('status');
+    const cameraSelect = document.getElementById('cameraSelect');
+
+    canvasElement.width = 500;
+    canvasElement.height = 500;
+
+    // --- Three.js Setup ---
+    const scene3D = new THREE.Scene();
+    const camera3D = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+    camera3D.position.set(0, 0, 5);
+
+    const renderer3D = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer3D.setSize(500, 500);
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+    scene3D.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    dirLight.position.set(2, 2, 5);
+    scene3D.add(dirLight);
+
+    let active3DModel = null;
+    const gltfLoader = new THREE.GLTFLoader();
+
+    // --- Stare ---
+    let currentStream = null;
+    let cameraInstance = null;
+    let showRealCam = false;
+    let isBodyTrackOn = false;
+    let isRecording = false;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+
+    let activeBgType = null;
+    let activeBgImage = null;
+    let activeAvatar2D = null;
+
+    let latestFaceResults = null;
+
+    const recordBtn = document.getElementById('recordBtn');
+    const toggleShowCamBtn = document.getElementById('toggleShowCam');
+    const toggleBodyTrackBtn = document.getElementById('toggleBodyTrack');
+    const fullScreenBtn = document.getElementById('fullScreenBtn');
+
+    const scaleSlider = document.getElementById('scaleSlider');
+    const offsetXSlider = document.getElementById('offsetXSlider');
+    const offsetYSlider = document.getElementById('offsetYSlider');
+
+    // Camera List
+    async function getCameraDevices() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        
+        cameraSelect.innerHTML = '';
+        if (videoDevices.length === 0) {
+          cameraSelect.innerHTML = '<option value="">Nicio cameră detectată</option>';
+          return;
+        }
+
+        videoDevices.forEach((device, index) => {
+          const option = document.createElement('option');
+          option.value = device.deviceId;
+          option.text = device.label || `Camera ${index + 1}`;
+          cameraSelect.appendChild(option);
+        });
+      } catch (err) {
+        console.error("Eroare la enumerarea camerelor:", err);
+      }
+    }
+
+    cameraSelect.addEventListener('change', () => {
+      if (cameraSelect.value) startCamera(cameraSelect.value);
+    });
+
+    // Upload Modele 3D GLB
+    document.getElementById('glbLoader').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const url = URL.createObjectURL(file);
+      statusEl.innerText = "Se încarcă modelul 3D...";
+
+      gltfLoader.load(url, (gltf) => {
+        if (active3DModel) scene3D.remove(active3DModel);
+
+        active3DModel = gltf.scene;
+        
+        const box = new THREE.Box3().setFromObject(active3DModel);
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const scale = 2.0 / maxDim;
+        active3DModel.scale.set(scale, scale, scale);
+        active3DModel.position.set(0, -0.5, 0);
+
+        scene3D.add(active3DModel);
+
+        statusEl.innerText = "Model 3D încărcat cu succes! 🟢";
+        statusEl.style.color = '#22c55e';
+      }, undefined, (err) => {
+        statusEl.innerText = "Eroare la încărcarea fișierului .GLB";
+        statusEl.style.color = '#ef4444';
+      });
+    });
+
+    // Upload Fundaluri
+    document.getElementById('bgLoader').addEventListener('change', (e) => {
+      const files = e.target.files;
+      const gallery = document.getElementById('bgGallery');
+      
+      Array.from(files).forEach(file => {
+        const url = URL.createObjectURL(file);
+        const item = document.createElement('div');
+        item.className = 'gallery-item';
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'delete-btn';
+        delBtn.innerText = '×';
+        delBtn.onclick = (event) => {
+          event.stopPropagation();
+          if (item.classList.contains('active')) {
+            activeBgType = null;
+            bgVideoElement.pause();
+          }
+          item.remove();
+        };
+
+        if (file.type.startsWith('video/')) {
+          const video = document.createElement('video');
+          video.src = url;
+          item.appendChild(video);
+          item.onclick = () => {
+            document.querySelectorAll('#bgGallery .gallery-item').forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+            activeBgType = 'video';
+            bgVideoElement.src = url;
+            bgVideoElement.play();
+          };
+        } else {
+          const img = document.createElement('img');
+          img.src = url;
+          item.appendChild(img);
+          item.onclick = () => {
+            document.querySelectorAll('#bgGallery .gallery-item').forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+            activeBgType = 'image';
+            activeBgImage = img;
+            bgVideoElement.pause();
+          };
+        }
+
+        item.appendChild(delBtn);
+        gallery.appendChild(item);
+      });
+    });
+
+    // Upload Avatare/Măști 2D
+    document.getElementById('avatarLoader').addEventListener('change', (e) => {
+      const files = e.target.files;
+      const gallery = document.getElementById('avatarGallery');
+
+      Array.from(files).forEach(file => {
+        const url = URL.createObjectURL(file);
+        const item = document.createElement('div');
+        item.className = 'gallery-item';
+
+        const img = document.createElement('img');
+        img.src = url;
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'delete-btn';
+        delBtn.innerText = '×';
+        delBtn.onclick = (event) => {
+          event.stopPropagation();
+          if (item.classList.contains('active')) activeAvatar2D = null;
+          item.remove();
+        };
+
+        item.onclick = () => {
+          document.querySelectorAll('#avatarGallery .gallery-item').forEach(i => i.classList.remove('active'));
+          item.classList.add('active');
+          activeAvatar2D = img;
+        };
+
+        item.appendChild(img);
+        item.appendChild(delBtn);
+        gallery.appendChild(item);
+      });
+    });
+
+    // MediaPipe Setup
+    const faceMesh = new FaceMesh({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+    });
+    faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true });
+    faceMesh.onResults((results) => { latestFaceResults = results; });
+
+    function drawScene() {
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+      // 1. Fundal
+      if (activeBgType === 'video' && bgVideoElement.readyState >= 2) {
+        canvasCtx.drawImage(bgVideoElement, 0, 0, canvasElement.width, canvasElement.height);
+      } else if (activeBgType === 'image' && activeBgImage && activeBgImage.complete) {
+        canvasCtx.drawImage(activeBgImage, 0, 0, canvasElement.width, canvasElement.height);
+      } else {
+        canvasCtx.fillStyle = '#050811';
+        canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+      }
+
+      // 2. Camera Reală
+      if (showRealCam && videoElement.readyState >= 2) {
+        canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+      }
+
+      // 3. Mască 2D PNG
+      if (activeAvatar2D && latestFaceResults && latestFaceResults.multiFaceLandmarks && latestFaceResults.multiFaceLandmarks.length > 0) {
+        const landmarks = latestFaceResults.multiFaceLandmarks[0];
+        const nose = landmarks[1];
+        const leftEye = landmarks[33];
+        const rightEye = landmarks[263];
+
+        const dx = (rightEye.x - leftEye.x) * canvasElement.width;
+        const dy = (rightEye.y - leftEye.y) * canvasElement.height;
+        const eyeDistance = Math.sqrt(dx * dx + dy * dy);
+        const angle = Math.atan2(dy, dx);
+
+        const width = eyeDistance * 3.5 * parseFloat(scaleSlider.value);
+        const height = width * (activeAvatar2D.naturalHeight / activeAvatar2D.naturalWidth);
+
+        const x = nose.x * canvasElement.width + parseFloat(offsetXSlider.value);
+        const y = nose.y * canvasElement.height + parseFloat(offsetYSlider.value);
+
+        canvasCtx.save();
+        canvasCtx.translate(x, y);
+        canvasCtx.rotate(angle);
+        canvasCtx.drawImage(activeAvatar2D, -width / 2, -height / 2, width, height);
+        canvasCtx.restore();
+      }
+
+      // 4. Model 3D GLB
+      if (active3DModel) {
+        if (latestFaceResults && latestFaceResults.multiFaceLandmarks && latestFaceResults.multiFaceLandmarks.length > 0) {
+          const landmarks = latestFaceResults.multiFaceLandmarks[0];
+          const nose = landmarks[1];
+          const leftEye = landmarks[33];
+          const rightEye = landmarks[263];
+
+          const dx = rightEye.x - leftEye.x;
+          const dy = rightEye.y - leftEye.y;
+          const angle = Math.atan2(dy, dx);
+
+          active3DModel.rotation.z = -angle;
+          active3DModel.position.x = (nose.x - 0.5) * -3 + parseFloat(offsetXSlider.value) / 100;
+          active3DModel.position.y = (nose.y - 0.5) * -3 - parseFloat(offsetYSlider.value) / 100;
+          
+          const userScale = parseFloat(scaleSlider.value);
+          active3DModel.scale.set(userScale, userScale, userScale);
+        }
+
+        renderer3D.render(scene3D, camera3D);
+        canvasCtx.drawImage(renderer3D.domElement, 0, 0, canvasElement.width, canvasElement.height);
+      }
+    }
+
+    async function startCamera(deviceId = null) {
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+      }
+
+      const constraints = {
+        video: deviceId ? { deviceId: { exact: deviceId }, width: 500, height: 500 } : { width: 500, height: 500 }
+      };
+
+      try {
+        currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+        videoElement.srcObject = currentStream;
+        await videoElement.play();
+
+        if (!cameraInstance) {
+          cameraInstance = new Camera(videoElement, {
+            onFrame: async () => {
+              await faceMesh.send({ image: videoElement });
+            },
+            width: 500,
+            height: 500
+          });
+          cameraInstance.start();
+        }
+
+        await getCameraDevices();
+        if (deviceId) cameraSelect.value = deviceId;
+
+        statusEl.innerText = "Camera Activă 🟢";
+        statusEl.style.color = '#22c55e';
+      } catch (err) {
+        statusEl.innerText = "Eroare la pornirea camerei!";
+        statusEl.style.color = '#ef4444';
+      }
+    }
+
+    function renderLoop() {
+      drawScene();
+      requestAnimationFrame(renderLoop);
+    }
+
+    // Înregistrare MP4
+    recordBtn.addEventListener('click', () => {
+      if (!isRecording) {
+        recordedChunks = [];
+        const stream = canvasElement.captureStream(30);
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) recordedChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordedChunks, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `VTuber_Studio_3D_${Date.now()}.webm`;
+          a.click();
+        };
+
+        mediaRecorder.start();
+        isRecording = true;
+        recordBtn.innerText = "⏹ Oprește și Salvează Video";
+        recordBtn.classList.add('recording');
+      } else {
+        mediaRecorder.stop();
+        isRecording = false;
+        recordBtn.innerText = "⏺ Începe Înregistrarea Video (MP4)";
+        recordBtn.classList.remove('recording');
+      }
+    });
+
+    toggleShowCamBtn.addEventListener('click', () => {
+      showRealCam = !showRealCam;
+      toggleShowCamBtn.innerText = `Camera Reală: ${showRealCam ? 'ON' : 'OFF'}`;
+      toggleShowCamBtn.classList.toggle('active', showRealCam);
+    });
+
+    document.getElementById('resetTouchBtn').addEventListener('click', () => {
+      scaleSlider.value = 1.0;
+      offsetXSlider.value = 0;
+      offsetYSlider.value = 0;
+    });
+
+    fullScreenBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        canvasContainer.requestFullscreen();
+      } else {
+        document.exitFullscreen();
+      }
+    });
+
+    startCamera();
+    renderLoop();
+  </script>
+</body>
+</html>
