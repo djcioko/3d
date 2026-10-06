@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>2D Puppet Rigging & Tracking System - v2.0</title>
+  <title>2D Puppet Rigging - v2.1 Individual Switches</title>
   <style>
     * {
       box-sizing: border-box;
@@ -38,7 +38,7 @@
       transform: scaleX(-1);
     }
 
-    /* Panou Control Control */
+    /* Control Panel */
     #ui-overlay {
       position: absolute;
       top: 15px;
@@ -47,7 +47,7 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
-      width: 340px;
+      width: 350px;
       max-height: 92vh;
       overflow-y: auto;
       background: rgba(15, 15, 25, 0.92);
@@ -73,25 +73,27 @@
     }
 
     .btn-toggle {
-      flex: 1;
       background: rgba(255, 255, 255, 0.1);
       color: #fff;
       border: 1px solid rgba(255, 255, 255, 0.2);
-      padding: 6px 10px;
+      padding: 5px 8px;
       font-size: 11px;
       border-radius: 6px;
       cursor: pointer;
+      min-width: 65px;
+      text-align: center;
     }
     .btn-toggle.active {
       background: rgba(0, 255, 204, 0.3);
       border-color: #00ffcc;
       color: #00ffcc;
+      font-weight: bold;
     }
 
     .upload-group {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 8px;
       border-top: 1px solid rgba(255, 255, 255, 0.1);
       padding-top: 10px;
     }
@@ -103,13 +105,20 @@
     }
     .file-input {
       color: #ccc;
-      font-size: 12px;
+      font-size: 11px;
+      flex: 1;
     }
 
     .row-btns {
       display: flex;
       gap: 6px;
       flex-wrap: wrap;
+    }
+
+    .item-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
 
     .scale-controls {
@@ -138,40 +147,43 @@
 
 <div id="container">
   <div id="ui-overlay">
-    <button id="start-btn" class="btn-main">▶️ Pornire Puppet Rig v2.0</button>
+    <button id="start-btn" class="btn-main">▶️ Pornire Puppet Rig v2.1</button>
     <div id="status">Apasă pe buton pentru start...</div>
 
-    <!-- Switchuri ON/OFF Layer-e -->
+    <!-- Switchuri Globale Layer-e -->
     <div class="upload-group">
-      <label>Comutatoare Layer-e (ON / OFF)</label>
+      <label>Comutatoare Generale</label>
       <div class="row-btns">
-        <button id="toggle-png" class="btn-toggle active">PNG Puppet: ON</button>
         <button id="toggle-skeleton" class="btn-toggle active">Linii Tracking: ON</button>
         <button id="toggle-crop" class="btn-toggle active">Crop AI: ON</button>
       </div>
     </div>
 
-    <!-- Upload Fragmente PNG -->
+    <!-- Upload & ON/OFF pe Fiecare Fragment PNG -->
     <div class="upload-group">
-      <label>Încărcare Fragmente PNG 2D</label>
+      <label>Încărcare & Comutatoare Elemente PNG</label>
       
-      <div class="scale-controls">
-        <span>1. Cap / Față:</span>
+      <!-- 1. CAP -->
+      <div class="item-row">
+        <button id="tog-head" class="btn-toggle active">Cap: ON</button>
         <input type="file" id="png-head" accept="image/png,image/*" class="file-input">
       </div>
 
-      <div class="scale-controls">
-        <span>2. Bust / Torso:</span>
+      <!-- 2. TORSO -->
+      <div class="item-row">
+        <button id="tog-torso" class="btn-toggle active">Torso: ON</button>
         <input type="file" id="png-torso" accept="image/png,image/*" class="file-input">
       </div>
 
-      <div class="scale-controls">
-        <span>3. Braț Stâng:</span>
+      <!-- 3. BRAȚ STÂNG -->
+      <div class="item-row">
+        <button id="tog-arm-left" class="btn-toggle active">Braț L: ON</button>
         <input type="file" id="png-arm-left" accept="image/png,image/*" class="file-input">
       </div>
 
-      <div class="scale-controls">
-        <span>4. Braț Drept:</span>
+      <!-- 4. BRAȚ DREPT -->
+      <div class="item-row">
+        <button id="tog-arm-right" class="btn-toggle active">Braț R: ON</button>
         <input type="file" id="png-arm-right" accept="image/png,image/*" class="file-input">
       </div>
     </div>
@@ -214,10 +226,15 @@
   const startBtn = document.getElementById('start-btn');
   const statusDiv = document.getElementById('status');
 
-  // Toggle BTNs
-  const togglePngBtn = document.getElementById('toggle-png');
+  // Toggle BTNs Globale
   const toggleSkeletonBtn = document.getElementById('toggle-skeleton');
   const toggleCropBtn = document.getElementById('toggle-crop');
+
+  // Toggle BTNs Individuale
+  const togHeadBtn = document.getElementById('tog-head');
+  const togTorsoBtn = document.getElementById('tog-torso');
+  const togArmLeftBtn = document.getElementById('tog-arm-left');
+  const togArmRightBtn = document.getElementById('tog-arm-right');
 
   // Inputs Fragmente
   const inputHead = document.getElementById('png-head');
@@ -231,10 +248,16 @@
   const sliderTorso = document.getElementById('scale-torso');
   const sliderArms = document.getElementById('scale-arms');
 
-  // Stări Aplicație
-  let showPng = true;
-  let showSkeleton = true;
-  let enableCrop = true;
+  // Stări ON / OFF Individuale (Restaurate din LocalStorage)
+  let showSkeleton = localStorage.getItem('app_showSkeleton') !== 'false';
+  let enableCrop = localStorage.getItem('app_crop') !== 'false';
+
+  const partVis = {
+    head: localStorage.getItem('app_vis_head') !== 'false',
+    torso: localStorage.getItem('app_vis_torso') !== 'false',
+    armLeft: localStorage.getItem('app_vis_armLeft') !== 'false',
+    armRight: localStorage.getItem('app_vis_armRight') !== 'false'
+  };
 
   let bgType = 'none';
   let customBgImg = null;
@@ -265,7 +288,7 @@
   window.addEventListener('resize', resizeCanvas);
   resizeCanvas();
 
-  // Helper Salvare/Încărcare LocalStorage pentru fișiere (IndexedDB / Base64)
+  // Helper Salvare/Încărcare
   function saveImageToStorage(key, imgDataUrl) {
     try { localStorage.setItem(key, imgDataUrl); } catch(e){}
   }
@@ -277,7 +300,6 @@
     img.src = src;
   }
 
-  // Deschidere și Salvare Fragmente
   function handleFileInput(inputEl, storageKey, objKey) {
     inputEl.addEventListener('change', (e) => {
       const file = e.target.files[0];
@@ -299,33 +321,48 @@
   handleFileInput(inputArmLeft, 'app_png_arm_left', 'armLeft');
   handleFileInput(inputArmRight, 'app_png_arm_right', 'armRight');
 
-  // Restaurare automata la reîncărcare pagină
+  // Restaurare automata fișiere la reîncărcare
   window.addEventListener('load', () => {
     ['head', 'torso', 'arm_left', 'arm_right'].forEach(part => {
       const saved = localStorage.getItem(`app_png_${part}`);
       const keyMap = { head: 'head', torso: 'torso', arm_left: 'armLeft', arm_right: 'armRight' };
       if (saved) loadImage(saved, (img) => { puppetImages[keyMap[part]] = img; });
     });
+
+    // Actualizare Stări Vizuale Butoane
+    updateBtnState(togHeadBtn, partVis.head, "Cap");
+    updateBtnState(togTorsoBtn, partVis.torso, "Torso");
+    updateBtnState(togArmLeftBtn, partVis.armLeft, "Braț L");
+    updateBtnState(togArmRightBtn, partVis.armRight, "Braț R");
+    updateBtnState(toggleSkeletonBtn, showSkeleton, "Linii Tracking");
+    updateBtnState(toggleCropBtn, enableCrop, "Crop AI");
   });
 
-  // Event-uri Toggles
-  togglePngBtn.addEventListener('click', () => {
-    showPng = !showPng;
-    togglePngBtn.classList.toggle('active', showPng);
-    togglePngBtn.innerText = `PNG Puppet: ${showPng ? 'ON' : 'OFF'}`;
-  });
+  function updateBtnState(btn, state, label) {
+    btn.classList.toggle('active', state);
+    btn.innerText = `${label}: ${state ? 'ON' : 'OFF'}`;
+  }
 
-  toggleSkeletonBtn.addEventListener('click', () => {
-    showSkeleton = !showSkeleton;
-    toggleSkeletonBtn.classList.toggle('active', showSkeleton);
-    toggleSkeletonBtn.innerText = `Linii Tracking: ${showSkeleton ? 'ON' : 'OFF'}`;
-  });
+  // Bind Switch-uri Individuale
+  function bindToggle(btn, key, label, isGlobal = false) {
+    btn.addEventListener('click', () => {
+      if (isGlobal) {
+        if (key === 'skeleton') { showSkeleton = !showSkeleton; localStorage.setItem('app_showSkeleton', showSkeleton); updateBtnState(btn, showSkeleton, label); }
+        if (key === 'crop') { enableCrop = !enableCrop; localStorage.setItem('app_crop', enableCrop); updateBtnState(btn, enableCrop, label); }
+      } else {
+        partVis[key] = !partVis[key];
+        localStorage.setItem(`app_vis_${key}`, partVis[key]);
+        updateBtnState(btn, partVis[key], label);
+      }
+    });
+  }
 
-  toggleCropBtn.addEventListener('click', () => {
-    enableCrop = !enableCrop;
-    toggleCropBtn.classList.toggle('active', enableCrop);
-    toggleCropBtn.innerText = `Crop AI: ${enableCrop ? 'ON' : 'OFF'}`;
-  });
+  bindToggle(togHeadBtn, 'head', 'Cap');
+  bindToggle(togTorsoBtn, 'torso', 'Torso');
+  bindToggle(togArmLeftBtn, 'armLeft', 'Braț L');
+  bindToggle(togArmRightBtn, 'armRight', 'Braț R');
+  bindToggle(toggleSkeletonBtn, 'skeleton', 'Linii Tracking', true);
+  bindToggle(toggleCropBtn, 'crop', 'Crop AI', true);
 
   sliderHead.addEventListener('input', (e) => puppetScales.head = parseFloat(e.target.value));
   sliderTorso.addEventListener('input', (e) => puppetScales.torso = parseFloat(e.target.value));
@@ -346,13 +383,17 @@
     }
   });
 
-  // Funcție Matematică pentru Desenare și Rotație Segment 2D
+  // Funcție Matematică Rotație Segment
   function drawBoneSegment(ctx, img, p1, p2, scaleFactor = 1.0, widthOverride = null) {
     if (!img) return;
 
     const dx = p2.x - p1.x;
     const dy = p2.y - p1.y;
     const distance = Math.hypot(dx, dy);
+    
+    // Ignoră dacă articulațiile sunt suprapuse nefiresc (ex: pozat pe scaun sub birou)
+    if (distance < 15) return;
+
     const angle = Math.atan2(dy, dx);
 
     ctx.save();
@@ -362,7 +403,6 @@
     const drawLength = distance;
     const drawWidth = (widthOverride || (img.height * (drawLength / img.width))) * scaleFactor;
 
-    // Desenează segmentul orientat după axa dintre cele două articulații
     ctx.drawImage(img, 0, -drawWidth / 2, drawLength, drawWidth);
     ctx.restore();
   }
@@ -412,7 +452,7 @@
       canvasCtx.drawImage(results.image, 0, 0, w, h);
     }
 
-    // 2. PUPPET RIGGING 2D & SKELETON
+    // 2. PUPPET RIGGING 2D CU SWITCH-URI SEPARATE
     if (results.poseLandmarks) {
       const lm = results.poseLandmarks;
 
@@ -430,31 +470,34 @@
 
       const shoulderWidth = Math.hypot(pts.rightShoulder.x - pts.leftShoulder.x, pts.rightShoulder.y - pts.leftShoulder.y);
 
-      // --- LAYER PNG PUPPET (ROTAȚIE PE ARTICULAȚII) ---
-      if (showPng) {
-        // A. Torso / Bust (Ancorat între umeri și șolduri)
-        if (puppetImages.torso) {
-          const chestCenter = { x: (pts.leftShoulder.x + pts.rightShoulder.x)/2, y: (pts.leftShoulder.y + pts.leftHip.y)/2 };
-          const torsoW = shoulderWidth * 1.6 * puppetScales.torso;
-          const torsoH = (puppetImages.torso.height / puppetImages.torso.width) * torsoW;
-          canvasCtx.drawImage(puppetImages.torso, chestCenter.x - torsoW/2, chestCenter.y - torsoH/2, torsoW, torsoH);
-        }
+      // --- RENDERE ELEMENTE PNG INDIVIDUALE ---
 
-        // B. Cap (Orientat pe nas)
-        if (puppetImages.head) {
-          const headW = shoulderWidth * 1.2 * puppetScales.head;
-          const headH = (puppetImages.head.height / puppetImages.head.width) * headW;
-          canvasCtx.drawImage(puppetImages.head, pts.nose.x - headW/2, pts.nose.y - headH/2, headW, headH);
-        }
+      // A. Torso / Bust (ON / OFF)
+      if (partVis.torso && puppetImages.torso) {
+        const chestCenter = { x: (pts.leftShoulder.x + pts.rightShoulder.x)/2, y: (pts.leftShoulder.y + pts.leftHip.y)/2 };
+        const torsoW = shoulderWidth * 1.6 * puppetScales.torso;
+        const torsoH = (puppetImages.torso.height / puppetImages.torso.width) * torsoW;
+        canvasCtx.drawImage(puppetImages.torso, chestCenter.x - torsoW/2, chestCenter.y - torsoH/2, torsoW, torsoH);
+      }
 
-        // C. Braț Stâng (Segmentat Umăr -> Cot -> Încheietură)
+      // B. Cap (ON / OFF)
+      if (partVis.head && puppetImages.head) {
+        const headW = shoulderWidth * 1.2 * puppetScales.head;
+        const headH = (puppetImages.head.height / puppetImages.head.width) * headW;
+        canvasCtx.drawImage(puppetImages.head, pts.nose.x - headW/2, pts.nose.y - headH/2, headW, headH);
+      }
+
+      // C. Braț Stâng (ON / OFF)
+      if (partVis.armLeft && puppetImages.armLeft) {
         drawBoneSegment(canvasCtx, puppetImages.armLeft, pts.leftShoulder, pts.leftElbow, puppetScales.arms);
+      }
 
-        // D. Braț Drept
+      // D. Braț Drept (ON / OFF)
+      if (partVis.armRight && puppetImages.armRight) {
         drawBoneSegment(canvasCtx, puppetImages.armRight, pts.rightShoulder, pts.rightElbow, puppetScales.arms);
       }
 
-      // --- LAYER LINII DE TRACKING ---
+      // --- LAYER LINII TRACKING ---
       if (showSkeleton) {
         // Poligon Bust
         canvasCtx.beginPath();
@@ -476,7 +519,7 @@
         canvasCtx.lineWidth = 2;
         canvasCtx.stroke();
 
-        // Brațe
+        // Linii Brațe
         const arms = [
           [pts.leftShoulder, pts.leftElbow], [pts.leftElbow, pts.leftWrist],
           [pts.rightShoulder, pts.rightElbow], [pts.rightElbow, pts.rightWrist]
@@ -501,7 +544,6 @@
       }
     }
 
-    // Degete Hands (Dacă este bifat scheletul)
     if (showSkeleton) {
       if (results.leftHandLandmarks) drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS, { color: '#00ffff', lineWidth: 1.5 });
       if (results.rightHandLandmarks) drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS, { color: '#00ffff', lineWidth: 1.5 });
@@ -520,7 +562,7 @@
       height: 720
     });
     await camera.start();
-    statusDiv.innerText = "v2.0 Activ • Pregătit pentru PNG Rigging!";
+    statusDiv.innerText = "v2.1 Activ • Controale Individuale Pregătite!";
   });
 </script>
 
