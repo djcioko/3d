@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Plasă Full Body High-Density Tracking</title>
+  <title>Mapare Corp & Bust Pas cu Pas</title>
   <style>
     * {
       box-sizing: border-box;
@@ -14,16 +14,13 @@
       width: 100vw;
       height: 100vh;
       overflow: hidden;
-      background-color: #050505;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #000;
+      font-family: sans-serif;
     }
     #container {
       position: relative;
       width: 100vw;
       height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
     }
     #webcam, #output_canvas {
       position: absolute;
@@ -35,13 +32,12 @@
       transform: scaleX(-1); /* Oglindire camera */
     }
     #webcam {
-      opacity: 0.25;
+      opacity: 0.3;
       z-index: 1;
     }
     #output_canvas {
       z-index: 2;
     }
-    /* Control Panel & Controls */
     #ui-overlay {
       position: absolute;
       top: 20px;
@@ -49,48 +45,37 @@
       z-index: 10;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
     }
     .btn-action {
-      background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+      background: #00ffcc;
       color: #000;
       border: none;
-      padding: 14px 24px;
+      padding: 12px 20px;
       font-size: 16px;
       font-weight: bold;
-      border-radius: 30px;
+      border-radius: 20px;
       cursor: pointer;
-      box-shadow: 0 4px 15px rgba(0, 242, 254, 0.4);
-      transition: all 0.3s ease;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    }
-    .btn-action:hover {
-      transform: scale(1.05);
-      box-shadow: 0 6px 20px rgba(0, 242, 254, 0.7);
     }
     #status {
       color: #00ffcc;
-      background: rgba(0, 0, 0, 0.75);
-      padding: 8px 15px;
-      border-radius: 20px;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 8px 12px;
+      border-radius: 8px;
       font-size: 14px;
-      border: 1px solid rgba(0, 255, 204, 0.3);
-      width: fit-content;
     }
   </style>
 
-  <!-- CDNs MediaPipe -->
+  <!-- Librarii MediaPipe Pose stabilite -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
 <div id="container">
   <div id="ui-overlay">
-    <button id="start-btn" class="btn-action">🚀 Lansează Plasa Full Body (Full Screen)</button>
-    <div id="status">Apasă pe buton pentru a inițializa plasa...</div>
+    <button id="start-btn" class="btn-action">▶️ Porneste Maparea Corpului</button>
+    <div id="status">Apasă pe buton pentru inițializare...</div>
   </div>
 
   <video id="webcam" autoplay playsinline muted></video>
@@ -114,97 +99,110 @@
   window.addEventListener('resize', resizeCanvas);
   resizeCanvas();
 
-  // Configurare MediaPipe Holistic pe complexitate maximă (Puncte ultra dense)
-  const holistic = new Holistic({
-    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`
+  // Configurare MediaPipe Pose pentru identificarea celor 12+ puncte ale corpului
+  const pose = new Pose({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
   });
 
-  holistic.setOptions({
-    modelComplexity: 2,          // Maxim de calitate și puncte pe corp
+  pose.setOptions({
+    modelComplexity: 1,
     smoothLandmarks: true,
-    enableSegmentation: false,
-    refineFaceLandmarks: true,   // Adaugă punctele detaliate ale feței/ochilor/buzelor
     minDetectionConfidence: 0.5,
     minTrackingConfidence: 0.5
   });
 
-  holistic.onResults((results) => {
-    statusDiv.innerText = "Plasă activă • Puncte mapate în timp real";
+  pose.onResults((results) => {
+    statusDiv.innerText = "Tracking Activ: Corp & Bust detectate!";
 
     canvasCtx.save();
     canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-    // 1. Plasa Față Ultra-Densă (~468 puncte / Teselare completă)
-    if (results.faceLandmarks) {
-      drawConnectors(canvasCtx, results.faceLandmarks, FACEMESH_TESSELATION, {
-        color: 'rgba(0, 242, 254, 0.4)',
-        lineWidth: 1
-      });
-      drawLandmarks(canvasCtx, results.faceLandmarks, {
-        color: '#00ffff',
-        radius: 1,
-        lineWidth: 0
-      });
-    }
-
-    // 2. Plasa Corp (Pose Mesh)
     if (results.poseLandmarks) {
-      drawConnectors(canvasCtx, results.poseLandmarks, HOLISTIC_CONNECTIONS, {
-        color: '#00ff66',
-        lineWidth: 2
-      });
-      drawLandmarks(canvasCtx, results.poseLandmarks, {
-        color: '#ff0055',
-        radius: 4
-      });
-    }
+      const lm = results.poseLandmarks;
+      const w = canvasElement.width;
+      const h = canvasElement.height;
 
-    // 3. Plasa Mâna Stângă (21 de repere + articulații)
-    if (results.leftHandLandmarks) {
-      drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS, {
-        color: '#ff00ff',
-        lineWidth: 2
-      });
-      drawLandmarks(canvasCtx, results.leftHandLandmarks, {
-        color: '#00ffff',
-        radius: 3
-      });
-    }
+      // Punctele principale ale bustului și corpului (convertite la pixeli reali)
+      const points = {
+        leftShoulder:  { x: lm[11].x * w, y: lm[11].y * h },
+        rightShoulder: { x: lm[12].x * w, y: lm[12].y * h },
+        leftElbow:     { x: lm[13].x * w, y: lm[13].y * h },
+        rightElbow:    { x: lm[14].x * w, y: lm[14].y * h },
+        leftWrist:     { x: lm[15].x * w, y: lm[15].y * h },
+        rightWrist:    { x: lm[16].x * w, y: lm[16].y * h },
+        leftHip:       { x: lm[23].x * w, y: lm[23].y * h },
+        rightHip:      { x: lm[24].x * w, y: lm[24].y * h },
+        leftKnee:      { x: lm[25].x * w, y: lm[25].y * h },
+        rightKnee:     { x: lm[26].x * w, y: lm[26].y * h },
+        leftAnkle:     { x: lm[27].x * w, y: lm[27].y * h },
+        rightAnkle:    { x: lm[28].x * w, y: lm[28].y * h }
+      };
 
-    // 4. Plasa Mâna Dreaptă (21 de repere + articulații)
-    if (results.rightHandLandmarks) {
-      drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS, {
-        color: '#ff00ff',
-        lineWidth: 2
+      // 1. DESENARE SHAPE / FORMA BUSTULUI (Poligon complet între Umeri și Șolduri)
+      canvasCtx.beginPath();
+      canvasCtx.moveTo(points.leftShoulder.x, points.leftShoulder.y);
+      canvasCtx.lineTo(points.rightShoulder.x, points.rightShoulder.y);
+      canvasCtx.lineTo(points.rightHip.x, points.rightHip.y);
+      canvasCtx.lineTo(points.leftHip.x, points.leftHip.y);
+      canvasCtx.closePath();
+      canvasCtx.fillStyle = 'rgba(0, 255, 204, 0.25)'; // Umplere bust
+      canvasCtx.fill();
+      canvasCtx.strokeStyle = '#00ffcc';
+      canvasCtx.lineWidth = 4;
+      canvasCtx.stroke();
+
+      // 2. DESENARE CONEXIUNI BRAȚE ȘI PICIOARE (Linii groase)
+      const connections = [
+        [points.leftShoulder, points.leftElbow],
+        [points.leftElbow, points.leftWrist],
+        [points.rightShoulder, points.rightElbow],
+        [points.rightElbow, points.rightWrist],
+        [points.leftHip, points.leftKnee],
+        [points.leftKnee, points.leftAnkle],
+        [points.rightHip, points.rightKnee],
+        [points.rightKnee, points.rightAnkle]
+      ];
+
+      canvasCtx.strokeStyle = '#ff0055';
+      canvasCtx.lineWidth = 6;
+      connections.forEach(([p1, p2]) => {
+        canvasCtx.beginPath();
+        canvasCtx.moveTo(p1.x, p1.y);
+        canvasCtx.lineTo(p2.x, p2.y);
+        canvasCtx.stroke();
       });
-      drawLandmarks(canvasCtx, results.rightHandLandmarks, {
-        color: '#00ffff',
-        radius: 3
+
+      // 3. DESENARE CELE 12 PUNCTE MARI CHEIE (Articulații)
+      Object.values(points).forEach((pt) => {
+        canvasCtx.beginPath();
+        canvasCtx.arc(pt.x, pt.y, 12, 0, 2 * Math.PI); // Puncte mari (Raza 12px)
+        canvasCtx.fillStyle = '#ffff00';
+        canvasCtx.fill();
+        canvasCtx.lineWidth = 3;
+        canvasCtx.strokeStyle = '#000';
+        canvasCtx.stroke();
       });
     }
 
     canvasCtx.restore();
   });
 
-  // Pornire Full Screen + Cameră la apăsarea pe buton
+  // Pornire Full Screen + Camera
   startBtn.addEventListener('click', async () => {
-    // Intrare în mod Full Screen
     if (container.requestFullscreen) {
       container.requestFullscreen();
-    } else if (container.webkitRequestFullscreen) {
-      container.webkitRequestFullscreen();
     }
 
-    statusDiv.innerText = "Se pornește camera și modelul AI...";
+    statusDiv.innerText = "Se pornește camera...";
     startBtn.style.display = 'none';
 
     if (!camera) {
       camera = new Camera(videoElement, {
         onFrame: async () => {
-          await holistic.send({ image: videoElement });
+          await pose.send({ image: videoElement });
         },
-        width: 1920,
-        height: 1080
+        width: 1280,
+        height: 720
       });
       await camera.start();
     }
