@@ -80,7 +80,7 @@
   <button id="ui-toggle-btn">👁️ Hide Controls</button>
 
   <div id="ui-overlay">
-    <button id="start-btn" class="btn-main">▶ Pornire Engine Rigging</button>
+    <button id="start-btn" class="btn-main">▶ Pornire Camera & Rigging</button>
     <div id="status">Apasă pe buton pentru start...</div>
 
     <div class="upload-group">
@@ -167,4 +167,544 @@
   const canvasCtx = canvasElement.getContext('2d');
 
   const startBtn = document.getElementById('start-btn');
-  const statusDiv
+  const statusDiv = document.getElementById('status');
+  const resetBtn = document.getElementById('reset-offsets');
+
+  const uiOverlay = document.getElementById('ui-overlay');
+  const uiToggleBtn = document.getElementById('ui-toggle-btn');
+  let isUiVisible = true;
+
+  uiToggleBtn.addEventListener('click', () => {
+    isUiVisible = !isUiVisible;
+    uiOverlay.classList.toggle('hidden', !isUiVisible);
+    uiToggleBtn.innerText = isUiVisible ? "👁️ Hide Controls" : "👁️ Show Controls";
+  });
+
+  const toggleSkeletonBtn = document.getElementById('toggle-skeleton');
+  const toggleCropBtn = document.getElementById('toggle-crop');
+  const toggleHideCamBtn = document.getElementById('toggle-hide-cam');
+  const tog3DBtn = document.getElementById('tog-3d');
+
+  const togHeadBtn = document.getElementById('tog-head');
+  const togTorsoBtn = document.getElementById('tog-torso');
+  const togArmLeftBtn = document.getElementById('tog-arm-left');
+  const togArmRightBtn = document.getElementById('tog-arm-right');
+
+  const inputHead = document.getElementById('file-head');
+  const inputTorso = document.getElementById('file-torso');
+  const inputArmLeft = document.getElementById('file-arm-left');
+  const inputArmRight = document.getElementById('file-arm-right');
+  const input3D = document.getElementById('file-3d');
+  const bgFileUpload = document.getElementById('bg-file-upload');
+
+  const sliderHead = document.getElementById('scale-head');
+  const sliderArms = document.getElementById('scale-arms');
+  const slider3DScale = document.getElementById('scale-3d');
+  const slider3DX = document.getElementById('offset-3d-x');
+  const slider3DY = document.getElementById('offset-3d-y');
+
+  let showSkeleton = localStorage.getItem('app_showSkeleton') !== 'false';
+  let enableCrop = localStorage.getItem('app_crop') !== 'false';
+  let hideCamera = localStorage.getItem('app_hide_camera') === 'true';
+  let show3D = localStorage.getItem('app_vis_3d') !== 'false';
+
+  const partVis = {
+    head: localStorage.getItem('app_vis_head') !== 'false',
+    torso: localStorage.getItem('app_vis_torso') !== 'false',
+    armLeft: localStorage.getItem('app_vis_armLeft') !== 'false',
+    armRight: localStorage.getItem('app_vis_armRight') !== 'false'
+  };
+
+  // Puncte de modulație libere (8 Puncte de control salvate)
+  let torsoGridOffsets = JSON.parse(localStorage.getItem('app_torso_grid_offsets')) || [
+    {x:0, y:0}, {x:0, y:0}, {x:0, y:0}, {x:0, y:0},
+    {x:0, y:0}, {x:0, y:0}, {x:0, y:0}, {x:0, y:0}
+  ];
+
+  let headOffset = JSON.parse(localStorage.getItem('app_head_drag_offset')) || { x: 0, y: 0 };
+
+  let bgType = 'none';
+  let customBgImg = null;
+
+  const segmentAssets = {
+    head: { type: null, element: null },
+    torso: { type: null, element: null },
+    armLeft: { type: null, element: null },
+    armRight: { type: null, element: null }
+  };
+
+  let model3DData = null;
+  const puppetScales = { head: 1.0, arms: 1.0, scale3D: 1.0, x3D: 0, y3D: 0 };
+
+  const threeScene = new THREE.Scene();
+  const threeCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000);
+  threeCamera.position.z = 5;
+  const threeRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  threeRenderer.setSize(window.innerWidth, window.innerHeight);
+
+  const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+  threeScene.add(ambientLight);
+  const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  dirLight.position.set(0, 1, 2);
+  threeScene.add(dirLight);
+
+  const gltfLoader = new THREE.GLTFLoader();
+
+  const maskCanvas = document.createElement('canvas');
+  const maskCtx = maskCanvas.getContext('2d');
+
+  function resizeCanvas() {
+    canvasElement.width = window.innerWidth;
+    canvasElement.height = window.innerHeight;
+    maskCanvas.width = window.innerWidth;
+    maskCanvas.height = window.innerHeight;
+    threeRenderer.setSize(window.innerWidth, window.innerHeight);
+    threeCamera.left = -window.innerWidth / 2;
+    threeCamera.right = window.innerWidth / 2;
+    threeCamera.top = window.innerHeight / 2;
+    threeCamera.bottom = -window.innerHeight / 2;
+    threeCamera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  let activeTarget = null; 
+  let activeTorsoPoints = [];
+  let currentHeadCenter = { x: 0, y: 0, r: 50 };
+
+  canvasElement.addEventListener('mousedown', (e) => {
+    const rect = canvasElement.getBoundingClientRect();
+    const mouseX = rect.width - (e.clientX - rect.left); // Mirroring
+    const mouseY = e.clientY - rect.top;
+
+    for (let i = 0; i < activeTorsoPoints.length; i++) {
+      const pt = activeTorsoPoints[i];
+      if (Math.hypot(mouseX - pt.x, mouseY - pt.y) < 25) {
+        activeTarget = { type: 'torso', index: i };
+        return;
+      }
+    }
+
+    if (partVis.head && Math.hypot(mouseX - currentHeadCenter.x, mouseY - currentHeadCenter.y) < currentHeadCenter.r) {
+      activeTarget = { type: 'head' };
+      return;
+    }
+  });
+
+  canvasElement.addEventListener('mousemove', (e) => {
+    if (!activeTarget) return;
+    const rect = canvasElement.getBoundingClientRect();
+    const mouseX = rect.width - (e.clientX - rect.left);
+    const mouseY = e.clientY - rect.top;
+
+    if (activeTarget.type === 'torso') {
+      const idx = activeTarget.index;
+      const basePt = activeTorsoPoints[idx].base;
+      torsoGridOffsets[idx].x = mouseX - basePt.x;
+      torsoGridOffsets[idx].y = mouseY - basePt.y;
+      localStorage.setItem('app_torso_grid_offsets', JSON.stringify(torsoGridOffsets));
+    } else if (activeTarget.type === 'head') {
+      headOffset.x = mouseX - currentHeadCenter.baseX;
+      headOffset.y = mouseY - currentHeadCenter.baseY;
+      localStorage.setItem('app_head_drag_offset', JSON.stringify(headOffset));
+    }
+  });
+
+  window.addEventListener('mouseup', () => { activeTarget = null; });
+
+  canvasElement.addEventListener('wheel', (e) => {
+    const rect = canvasElement.getBoundingClientRect();
+    const mouseX = rect.width - (e.clientX - rect.left);
+    const mouseY = e.clientY - rect.top;
+
+    if (partVis.head && Math.hypot(mouseX - currentHeadCenter.x, mouseY - currentHeadCenter.y) < currentHeadCenter.r * 1.5) {
+      e.preventDefault();
+      let scale = puppetScales.head;
+      if (e.deltaY < 0) scale += 0.05;
+      else scale -= 0.05;
+      scale = Math.max(0.3, Math.min(4.0, scale));
+      puppetScales.head = scale;
+      sliderHead.value = scale;
+    }
+  }, { passive: false });
+
+  resetBtn.addEventListener('click', () => {
+    torsoGridOffsets = Array(8).fill(null).map(() => ({x: 0, y: 0}));
+    headOffset = { x: 0, y: 0 };
+    localStorage.removeItem('app_torso_grid_offsets');
+    localStorage.removeItem('app_head_drag_offset');
+    statusDiv.innerText = "Toate punctele au fost resetate la poziția implicită!";
+  });
+
+  function handleMediaInput(inputEl, storageKey, key) {
+    inputEl.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const fileUrl = URL.createObjectURL(file);
+      if (file.type.startsWith('video/')) {
+        const vid = document.createElement('video');
+        vid.src = fileUrl;
+        vid.autoplay = true;
+        vid.loop = true;
+        vid.muted = true;
+        vid.playsInline = true;
+        vid.play();
+        segmentAssets[key] = { type: 'video', element: vid };
+        statusDiv.innerText = `Video încărcat pentru ${key}!`;
+      } else {
+        const img = new Image();
+        img.onload = () => {
+          segmentAssets[key] = { type: 'image', element: img };
+          statusDiv.innerText = `Imagine încărcată pentru ${key}!`;
+        };
+        img.src = fileUrl;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try { localStorage.setItem(storageKey, event.target.result); } catch(err){}
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  }
+
+  handleMediaInput(inputHead, 'app_file_head', 'head');
+  handleMediaInput(inputTorso, 'app_file_torso', 'torso');
+  handleMediaInput(inputArmLeft, 'app_file_arm_left', 'armLeft');
+  handleMediaInput(inputArmRight, 'app_file_arm_right', 'armRight');
+
+  input3D.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      gltfLoader.parse(event.target.result, '', (gltf) => {
+        if (model3DData) threeScene.remove(model3DData);
+        model3DData = gltf.scene;
+        threeScene.add(model3DData);
+        statusDiv.innerText = "Model 3D încărcat!";
+      });
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  window.addEventListener('load', () => {
+    ['head', 'torso', 'arm_left', 'arm_right'].forEach(part => {
+      const saved = localStorage.getItem(`app_file_${part}`);
+      const keyMap = { head: 'head', torso: 'torso', arm_left: 'armLeft', arm_right: 'armRight' };
+      if (saved) {
+        const img = new Image();
+        img.onload = () => segmentAssets[keyMap[part]] = { type: 'image', element: img };
+        img.src = saved;
+      }
+    });
+
+    updateBtnState(togHeadBtn, partVis.head, "Cap");
+    updateBtnState(togTorsoBtn, partVis.torso, "Torso");
+    updateBtnState(togArmLeftBtn, partVis.armLeft, "Braț L");
+    updateBtnState(togArmRightBtn, partVis.armRight, "Braț R");
+    updateBtnState(toggleSkeletonBtn, showSkeleton, "Linii Grid");
+    updateBtnState(toggleCropBtn, enableCrop, "Crop AI");
+    updateBtnState(toggleHideCamBtn, !hideCamera, "Camera", "SHOW", "HIDE");
+    updateBtnState(tog3DBtn, show3D, "Model 3D");
+  });
+
+  function updateBtnState(btn, state, label, onTxt = "ON", offTxt = "OFF") {
+    btn.classList.toggle('active', state);
+    btn.innerText = `${label}: ${state ? onTxt : offTxt}`;
+  }
+
+  function bindToggle(btn, key, label, isGlobal = false) {
+    btn.addEventListener('click', () => {
+      if (isGlobal) {
+        if (key === 'skeleton') { showSkeleton = !showSkeleton; localStorage.setItem('app_showSkeleton', showSkeleton); updateBtnState(btn, showSkeleton, label); }
+        if (key === 'crop') { enableCrop = !enableCrop; localStorage.setItem('app_crop', enableCrop); updateBtnState(btn, enableCrop, label); }
+        if (key === 'hideCam') { hideCamera = !hideCamera; localStorage.setItem('app_hide_camera', hideCamera); updateBtnState(btn, !hideCamera, label, "SHOW", "HIDE"); }
+        if (key === 'show3d') { show3D = !show3D; localStorage.setItem('app_vis_3d', show3D); updateBtnState(btn, show3D, label); }
+      } else {
+        partVis[key] = !partVis[key];
+        localStorage.setItem(`app_vis_${key}`, partVis[key]);
+        updateBtnState(btn, partVis[key], label);
+      }
+    });
+  }
+
+  bindToggle(togHeadBtn, 'head', 'Cap');
+  bindToggle(togTorsoBtn, 'torso', 'Torso');
+  bindToggle(togArmLeftBtn, 'armLeft', 'Braț L');
+  bindToggle(togArmRightBtn, 'armRight', 'Braț R');
+  bindToggle(toggleSkeletonBtn, 'skeleton', 'Linii Grid', true);
+  bindToggle(toggleCropBtn, 'crop', 'Crop AI', true);
+  bindToggle(toggleHideCamBtn, 'hideCam', 'Camera', true);
+  bindToggle(tog3DBtn, 'show3d', 'Model 3D', true);
+
+  sliderHead.addEventListener('input', (e) => puppetScales.head = parseFloat(e.target.value));
+  sliderArms.addEventListener('input', (e) => puppetScales.arms = parseFloat(e.target.value));
+  slider3DScale.addEventListener('input', (e) => puppetScales.scale3D = parseFloat(e.target.value));
+  slider3DX.addEventListener('input', (e) => puppetScales.x3D = parseFloat(e.target.value));
+  slider3DY.addEventListener('input', (e) => puppetScales.y3D = parseFloat(e.target.value));
+
+  bgFileUpload.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.type.startsWith('image/')) {
+      bgType = 'image';
+      bgVideoElement.pause();
+      const img = new Image();
+      img.onload = () => customBgImg = img;
+      img.src = URL.createObjectURL(file);
+    } else if (file.type.startsWith('video/')) {
+      bgType = 'video';
+      bgVideoElement.src = URL.createObjectURL(file);
+      bgVideoElement.play();
+    }
+  });
+
+  function drawTexturedTriangle(ctx, img, x0, y0, x1, y1, x2, y2, u0, v0, u1, v1, u2, v2) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.closePath();
+    ctx.clip();
+
+    const delta = u0 * (v1 - v2) - v0 * (u1 - u2) + (u1 * v2 - u2 * v1);
+    if (Math.abs(delta) < 0.0001) { ctx.restore(); return; }
+
+    const deltaA = x0 * (v1 - v2) - v0 * (x1 - x2) + (x1 * v2 - x2 * v1);
+    const deltaB = u0 * (x1 - x2) - x0 * (u1 - u2) + (u1 * x2 - u2 * x1);
+    const deltaC = x0 * (u1 * v2 - u2 * v1) - u0 * (x1 * v2 - x2 * v1) + v0 * (x1 * u2 - x2 * u1);
+
+    const deltaD = y0 * (v1 - v2) - v0 * (y1 - y2) + (y1 * v2 - y2 * v1);
+    const deltaE = u0 * (y1 - y2) - y0 * (u1 - u2) + (u1 * y2 - u2 * y1);
+    const deltaF = y0 * (u1 * v2 - u2 * v1) - u0 * (y1 * v2 - y2 * v1) + v0 * (x1 * u2 - x2 * u1);
+
+    ctx.transform(
+      deltaA / delta, deltaD / delta,
+      deltaB / delta, deltaE / delta,
+      deltaC / delta, deltaF / delta
+    );
+
+    ctx.drawImage(img, 0, 0);
+    ctx.restore();
+  }
+
+  function drawFullWarpedTorso(ctx, mediaEl, gridPoints) {
+    if (!mediaEl) return;
+    const imgW = mediaEl.videoWidth || mediaEl.width || 100;
+    const imgH = mediaEl.videoHeight || mediaEl.height || 100;
+
+    for (let i = 0; i < 3; i++) {
+      const pL0 = gridPoints[i];
+      const pL1 = gridPoints[i + 1];
+      const pR0 = gridPoints[i + 4];
+      const pR1 = gridPoints[i + 5];
+
+      const u0 = 0,    v0 = (i / 3) * imgH;
+      const u1 = imgW, v1 = (i / 3) * imgH;
+      const u2 = 0,    v2 = ((i + 1) / 3) * imgH;
+      const u3 = imgW, v3 = ((i + 1) / 3) * imgH;
+
+      drawTexturedTriangle(ctx, mediaEl, pL0.x, pL0.y, pR0.x, pR0.y, pL1.x, pL1.y, u0, v0, u1, v1, u2, v2);
+      drawTexturedTriangle(ctx, mediaEl, pR0.x, pR0.y, pR1.x, pR1.y, pL1.x, pL1.y, u1, v1, u3, v3, u2, v2);
+    }
+  }
+
+  function drawFramedSegment(ctx, assetObj, p1, p2, thickness = 40) {
+    if (!assetObj || !assetObj.element) return;
+    const element = assetObj.element;
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance < 10) return;
+
+    const angle = Math.atan2(dy, dx);
+    ctx.save();
+    ctx.translate(p1.x, p1.y);
+    ctx.rotate(angle);
+
+    const drawWidth = thickness * puppetScales.arms;
+    ctx.drawImage(element, 0, -drawWidth / 2, distance, drawWidth);
+    ctx.restore();
+  }
+
+  function render3DAsset(model, x, y, scale) {
+    if (!model) return;
+    const w = canvasElement.width;
+    const h = canvasElement.height;
+    
+    const threeX = (x + puppetScales.x3D) - w / 2;
+    const threeY = -((y + puppetScales.y3D) - h / 2);
+
+    model.position.set(threeX, threeY, 0);
+    model.scale.set(scale * puppetScales.scale3D * 50, scale * puppetScales.scale3D * 50, scale * puppetScales.scale3D * 50);
+  }
+
+  const holistic = new Holistic({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}` });
+  holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, enableSegmentation: true, smoothSegmentation: true, refineFaceLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+
+  holistic.onResults((results) => {
+    const w = canvasElement.width;
+    const h = canvasElement.height;
+
+    canvasCtx.save();
+    canvasCtx.globalCompositeOperation = 'source-over';
+    canvasCtx.clearRect(0, 0, w, h);
+
+    if (hideCamera) {
+      if (bgType === 'image' && customBgImg) canvasCtx.drawImage(customBgImg, 0, 0, w, h);
+      else if (bgType === 'video' && bgVideoElement.readyState >= 2) canvasCtx.drawImage(bgVideoElement, 0, 0, w, h);
+      else { canvasCtx.fillStyle = '#08080c'; canvasCtx.fillRect(0, 0, w, h); }
+    } else if (enableCrop && results.segmentationMask) {
+      maskCtx.save();
+      maskCtx.globalCompositeOperation = 'source-over';
+      maskCtx.clearRect(0, 0, w, h);
+      maskCtx.drawImage(results.segmentationMask, 0, 0, w, h);
+      maskCtx.globalCompositeOperation = 'source-in';
+      maskCtx.drawImage(results.image, 0, 0, w, h);
+      maskCtx.restore();
+
+      if (bgType === 'image' && customBgImg) canvasCtx.drawImage(customBgImg, 0, 0, w, h);
+      else if (bgType === 'video' && bgVideoElement.readyState >= 2) canvasCtx.drawImage(bgVideoElement, 0, 0, w, h);
+      else { canvasCtx.fillStyle = '#08080c'; canvasCtx.fillRect(0, 0, w, h); }
+
+      canvasCtx.drawImage(maskCanvas, 0, 0, w, h);
+    } else {
+      canvasCtx.drawImage(results.image, 0, 0, w, h);
+    }
+
+    if (results.poseLandmarks) {
+      const lm = results.poseLandmarks;
+
+      const pts = {
+        nose:          { x: lm[0].x * w,  y: lm[0].y * h },
+        leftShoulder:  { x: lm[11].x * w, y: lm[11].y * h },
+        rightShoulder: { x: lm[12].x * w, y: lm[12].y * h },
+        leftElbow:     { x: lm[13].x * w, y: lm[13].y * h },
+        rightElbow:    { x: lm[14].x * w, y: lm[14].y * h },
+        leftWrist:     { x: lm[15].x * w, y: lm[15].y * h },
+        rightWrist:    { x: lm[16].x * w, y: lm[16].y * h },
+        leftHip:       { x: lm[23].x * w, y: lm[23].y * h },
+        rightHip:      { x: lm[24].x * w, y: lm[24].y * h }
+      };
+
+      const shoulderWidth = Math.hypot(pts.rightShoulder.x - pts.leftShoulder.x, pts.rightShoulder.y - pts.leftShoulder.y);
+
+      activeTorsoPoints = [];
+      for (let i = 0; i < 4; i++) {
+        const ratio = i / 3;
+        const baseLx = pts.leftShoulder.x + (pts.leftHip.x - pts.leftShoulder.x) * ratio;
+        const baseLy = pts.leftShoulder.y + (pts.leftHip.y - pts.leftShoulder.y) * ratio;
+        activeTorsoPoints[i] = {
+          x: baseLx + torsoGridOffsets[i].x,
+          y: baseLy + torsoGridOffsets[i].y,
+          base: { x: baseLx, y: baseLy }
+        };
+
+        const baseRx = pts.rightShoulder.x + (pts.rightHip.x - pts.rightShoulder.x) * ratio;
+        const baseRy = pts.rightShoulder.y + (pts.rightHip.y - pts.rightShoulder.y) * ratio;
+        activeTorsoPoints[i + 4] = {
+          x: baseRx + torsoGridOffsets[i + 4].x,
+          y: baseRy + torsoGridOffsets[i + 4].y,
+          base: { x: baseRx, y: baseRy }
+        };
+      }
+
+      currentHeadCenter = {
+        x: pts.nose.x + headOffset.x,
+        y: pts.nose.y + headOffset.y,
+        baseX: pts.nose.x,
+        baseY: pts.nose.y,
+        r: (shoulderWidth * 0.6) * puppetScales.head
+      };
+
+      if (partVis.head && segmentAssets.head.element) {
+        const headW = shoulderWidth * 1.2 * puppetScales.head;
+        const el = segmentAssets.head.element;
+        const headH = (el.videoHeight || el.height || 1) / (el.videoWidth || el.width || 1) * headW;
+        canvasCtx.drawImage(el, currentHeadCenter.x - headW/2, currentHeadCenter.y - headH/2, headW, headH);
+      }
+
+      if (partVis.torso && segmentAssets.torso.element) {
+        drawFullWarpedTorso(canvasCtx, segmentAssets.torso.element, activeTorsoPoints);
+      }
+
+      if (partVis.armLeft && segmentAssets.armLeft.element) {
+        drawFramedSegment(canvasCtx, segmentAssets.armLeft, pts.leftShoulder, pts.leftElbow, 35);
+        drawFramedSegment(canvasCtx, segmentAssets.armLeft, pts.leftElbow, pts.leftWrist, 30);
+      }
+
+      if (partVis.armRight && segmentAssets.armRight.element) {
+        drawFramedSegment(canvasCtx, segmentAssets.armRight, pts.rightShoulder, pts.rightElbow, 35);
+        drawFramedSegment(canvasCtx, segmentAssets.armRight, pts.rightElbow, pts.rightWrist, 30);
+      }
+
+      if (show3D && model3DData) {
+        render3DAsset(model3DData, currentHeadCenter.x, currentHeadCenter.y, puppetScales.head);
+        threeRenderer.render(threeScene, threeCamera);
+        canvasCtx.drawImage(threeRenderer.domElement, 0, 0);
+      }
+
+      if (showSkeleton) {
+        canvasCtx.strokeStyle = '#00ffcc';
+        canvasCtx.lineWidth = 1.5;
+        for (let i = 0; i < 3; i++) {
+          canvasCtx.beginPath();
+          canvasCtx.moveTo(activeTorsoPoints[i].x, activeTorsoPoints[i].y);
+          canvasCtx.lineTo(activeTorsoPoints[i+1].x, activeTorsoPoints[i+1].y);
+          canvasCtx.lineTo(activeTorsoPoints[i+5].x, activeTorsoPoints[i+5].y);
+          canvasCtx.lineTo(activeTorsoPoints[i+4].x, activeTorsoPoints[i+4].y);
+          canvasCtx.closePath();
+          canvasCtx.fillStyle = 'rgba(0, 255, 204, 0.08)';
+          canvasCtx.fill();
+          canvasCtx.stroke();
+        }
+
+        activeTorsoPoints.forEach((pt, idx) => {
+          canvasCtx.beginPath();
+          canvasCtx.arc(pt.x, pt.y, 8, 0, 2 * Math.PI);
+          canvasCtx.fillStyle = (activeTarget && activeTarget.type === 'torso' && activeTarget.index === idx) ? '#ff0055' : '#00ffcc';
+          canvasCtx.strokeStyle = '#ffffff';
+          canvasCtx.lineWidth = 2;
+          canvasCtx.fill();
+          canvasCtx.stroke();
+        });
+
+        canvasCtx.beginPath();
+        canvasCtx.arc(currentHeadCenter.x, currentHeadCenter.y, currentHeadCenter.r, 0, 2 * Math.PI);
+        canvasCtx.strokeStyle = (activeTarget && activeTarget.type === 'head') ? '#ff0055' : '#00f2fe';
+        canvasCtx.lineWidth = 2;
+        canvasCtx.stroke();
+
+        canvasCtx.beginPath();
+        canvasCtx.arc(currentHeadCenter.x, currentHeadCenter.y, 6, 0, 2 * Math.PI);
+        canvasCtx.fillStyle = '#00f2fe';
+        canvasCtx.fill();
+      }
+    }
+
+    if (showSkeleton) {
+      if (results.leftHandLandmarks) drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS, { color: '#00ffff', lineWidth: 1 });
+      if (results.rightHandLandmarks) drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS, { color: '#00ffff', lineWidth: 1 });
+    }
+
+    canvasCtx.restore();
+  });
+
+  startBtn.addEventListener('click', async () => {
+    statusDiv.innerText = "Se pornește camera...";
+    startBtn.style.display = 'none';
+    let camera = new Camera(videoElement, {
+      onFrame: async () => { await holistic.send({ image: videoElement }); },
+      width: 1280,
+      height: 720
+    });
+    await camera.start();
+    statusDiv.innerText = "Camera Activă • Puncte Torso Mutaibile Libere!";
+  });
+</script>
+
+</body>
+</html>
