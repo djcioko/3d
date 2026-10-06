@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>2D & 3D Rigging - Free Warp Mesh Mapping (Torso Modulation)</title>
+  <title>2D & 3D Rigging - Full Torso Mesh & Interactive Head Drag</title>
   <style>
     * {
       box-sizing: border-box;
@@ -39,7 +39,7 @@
       cursor: crosshair;
     }
 
-    /* Floating Toggle for Controls */
+    /* Floating Quick Toggle UI */
     #ui-toggle-btn {
       position: absolute;
       top: 15px;
@@ -60,7 +60,7 @@
       background: rgba(0, 255, 204, 0.4);
     }
 
-    /* UI Overlay */
+    /* Control Panel UI */
     #ui-overlay {
       position: absolute;
       top: 15px;
@@ -184,18 +184,18 @@
     <button id="start-btn" class="btn-main">▶ Pornire Engine Rigging</button>
     <div id="status">Apasă pe buton pentru start...</div>
 
-    <!-- Comutatoare Globale -->
+    <!-- Switchuri Globale -->
     <div class="upload-group">
       <label>Comutatoare Generale</label>
       <div class="row-btns">
         <button id="toggle-skeleton" class="btn-toggle active">Linii Tracking: ON</button>
         <button id="toggle-crop" class="btn-toggle active">Crop AI: ON</button>
         <button id="toggle-hide-cam" class="btn-toggle">Camera: SHOW</button>
-        <button id="reset-offsets" class="btn-toggle" style="border-color:#ff0055; color:#ff3366;">Reset Modulație</button>
+        <button id="reset-offsets" class="btn-toggle" style="border-color:#ff0055; color:#ff3366;">Reset Calibrare</button>
       </div>
     </div>
 
-    <!-- Mapare Segmente (Foto / Video) -->
+    <!-- Upload Foto/Video Segmente -->
     <div class="upload-group">
       <label>Încărcare Măști & Segmente (Foto / Video)</label>
       
@@ -205,7 +205,7 @@
         <input type="file" id="file-head" accept="image/*,video/*" class="file-input">
       </div>
 
-      <!-- TORSO (Modulare Freeform Mesh 4x4 Puncte) -->
+      <!-- TORSO (Full Warp Mesh 8 Puncte) -->
       <div class="item-row">
         <button id="tog-torso" class="btn-toggle active">Torso Warp: ON</button>
         <input type="file" id="file-torso" accept="image/*,video/*" class="file-input">
@@ -245,12 +245,12 @@
       </div>
     </div>
 
-    <!-- Calibrări & Scalare -->
+    <!-- Scalare Cap & Brațe -->
     <div class="upload-group">
-      <label>Scalare Cap & Brațe</label>
+      <label>Calibrare Manuală Cap & Brațe</label>
       <div class="scale-controls">
         <span>Scală Cap:</span>
-        <input type="range" id="scale-head" min="0.3" max="3.0" step="0.05" value="1.0">
+        <input type="range" id="scale-head" min="0.3" max="4.0" step="0.05" value="1.0">
       </div>
       <div class="scale-controls">
         <span>Grosime Brațe:</span>
@@ -280,7 +280,7 @@
   const statusDiv = document.getElementById('status');
   const resetBtn = document.getElementById('reset-offsets');
 
-  // UI Toggle
+  // UI Overlay Toggle
   const uiOverlay = document.getElementById('ui-overlay');
   const uiToggleBtn = document.getElementById('ui-toggle-btn');
   let isUiVisible = true;
@@ -291,13 +291,13 @@
     uiToggleBtn.innerText = isUiVisible ? "👁️ Hide Controls" : "👁️ Show Controls";
   });
 
-  // Controls Global
+  // Buttons Global
   const toggleSkeletonBtn = document.getElementById('toggle-skeleton');
   const toggleCropBtn = document.getElementById('toggle-crop');
   const toggleHideCamBtn = document.getElementById('toggle-hide-cam');
   const tog3DBtn = document.getElementById('tog-3d');
 
-  // Controls Segmente
+  // Buttons Parts
   const togHeadBtn = document.getElementById('tog-head');
   const togTorsoBtn = document.getElementById('tog-torso');
   const togArmLeftBtn = document.getElementById('tog-arm-left');
@@ -318,7 +318,7 @@
   const slider3DX = document.getElementById('offset-3d-x');
   const slider3DY = document.getElementById('offset-3d-y');
 
-  // Stări salvate
+  // Saved States
   let showSkeleton = localStorage.getItem('app_showSkeleton') !== 'false';
   let enableCrop = localStorage.getItem('app_crop') !== 'false';
   let hideCamera = localStorage.getItem('app_hide_camera') === 'true';
@@ -331,11 +331,14 @@
     armRight: localStorage.getItem('app_vis_armRight') !== 'false'
   };
 
-  // Matrice de Offset-uri pentru cele 8 Puncte de Modulație ale Torso-ului (4 stânga, 4 dreapta)
+  // Matrice 8 Puncte Torso (4 Stânga, 4 Dreapta)
   let torsoGridOffsets = JSON.parse(localStorage.getItem('app_torso_grid_offsets')) || [
-    {x:0, y:0}, {x:0, y:0}, {x:0, y:0}, {x:0, y:0}, // Partea Stângă (Top to Bottom)
-    {x:0, y:0}, {x:0, y:0}, {x:0, y:0}, {x:0, y:0}  // Partea Dreaptă (Top to Bottom)
+    {x:0, y:0}, {x:0, y:0}, {x:0, y:0}, {x:0, y:0},
+    {x:0, y:0}, {x:0, y:0}, {x:0, y:0}, {x:0, y:0}
   ];
+
+  // Offset Punct Ancorare Cap (Drag & Drop)
+  let headOffset = JSON.parse(localStorage.getItem('app_head_drag_offset')) || { x: 0, y: 0 };
 
   let bgType = 'none';
   let customBgImg = null;
@@ -350,7 +353,7 @@
   let model3DData = null;
   const puppetScales = { head: 1.0, arms: 1.0, scale3D: 1.0, x3D: 0, y3D: 0 };
 
-  // Three.js Context
+  // Three.js
   const threeScene = new THREE.Scene();
   const threeCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000);
   threeCamera.position.z = 5;
@@ -383,43 +386,76 @@
   window.addEventListener('resize', resizeCanvas);
   resizeCanvas();
 
-  // Drag & Drop pentru Punctele de Modulație Torso
-  let draggingTorsoPointIndex = -1;
+  // Control Interactiv Mouse pe Canvas (Drag & Drop pe Torso Mesh + CAP)
+  let activeTarget = null; // 'head' sau index de la torso
   let activeTorsoPoints = [];
+  let currentHeadCenter = { x: 0, y: 0, r: 50 };
 
   canvasElement.addEventListener('mousedown', (e) => {
     const rect = canvasElement.getBoundingClientRect();
     const mouseX = rect.width - (e.clientX - rect.left); // Mirroring
     const mouseY = e.clientY - rect.top;
 
+    // 1. Verificare Puncte Torso
     for (let i = 0; i < activeTorsoPoints.length; i++) {
       const pt = activeTorsoPoints[i];
-      if (Math.hypot(mouseX - pt.x, mouseY - pt.y) < 18) {
-        draggingTorsoPointIndex = i;
-        break;
+      if (Math.hypot(mouseX - pt.x, mouseY - pt.y) < 20) {
+        activeTarget = { type: 'torso', index: i };
+        return;
       }
+    }
+
+    // 2. Verificare Cap (Drag Direct)
+    if (partVis.head && Math.hypot(mouseX - currentHeadCenter.x, mouseY - currentHeadCenter.y) < currentHeadCenter.r) {
+      activeTarget = { type: 'head' };
+      return;
     }
   });
 
   canvasElement.addEventListener('mousemove', (e) => {
-    if (draggingTorsoPointIndex === -1 || !activeTorsoPoints[draggingTorsoPointIndex]) return;
+    if (!activeTarget) return;
     const rect = canvasElement.getBoundingClientRect();
     const mouseX = rect.width - (e.clientX - rect.left);
     const mouseY = e.clientY - rect.top;
 
-    const basePt = activeTorsoPoints[draggingTorsoPointIndex].base;
-    torsoGridOffsets[draggingTorsoPointIndex].x = mouseX - basePt.x;
-    torsoGridOffsets[draggingTorsoPointIndex].y = mouseY - basePt.y;
-
-    localStorage.setItem('app_torso_grid_offsets', JSON.stringify(torsoGridOffsets));
+    if (activeTarget.type === 'torso') {
+      const idx = activeTarget.index;
+      const basePt = activeTorsoPoints[idx].base;
+      torsoGridOffsets[idx].x = mouseX - basePt.x;
+      torsoGridOffsets[idx].y = mouseY - basePt.y;
+      localStorage.setItem('app_torso_grid_offsets', JSON.stringify(torsoGridOffsets));
+    } else if (activeTarget.type === 'head') {
+      headOffset.x = mouseX - currentHeadCenter.baseX;
+      headOffset.y = mouseY - currentHeadCenter.baseY;
+      localStorage.setItem('app_head_drag_offset', JSON.stringify(headOffset));
+    }
   });
 
-  window.addEventListener('mouseup', () => { draggingTorsoPointIndex = -1; });
+  window.addEventListener('mouseup', () => { activeTarget = null; });
+
+  // Scalare Cap Direct prin Scroll de Mouse
+  canvasElement.addEventListener('wheel', (e) => {
+    const rect = canvasElement.getBoundingClientRect();
+    const mouseX = rect.width - (e.clientX - rect.left);
+    const mouseY = e.clientY - rect.top;
+
+    if (partVis.head && Math.hypot(mouseX - currentHeadCenter.x, mouseY - currentHeadCenter.y) < currentHeadCenter.r * 1.5) {
+      e.preventDefault();
+      let scale = puppetScales.head;
+      if (e.deltaY < 0) scale += 0.05;
+      else scale -= 0.05;
+      scale = Math.max(0.3, Math.min(4.0, scale));
+      puppetScales.head = scale;
+      sliderHead.value = scale;
+    }
+  }, { passive: false });
 
   resetBtn.addEventListener('click', () => {
     torsoGridOffsets = Array(8).fill(null).map(() => ({x: 0, y: 0}));
+    headOffset = { x: 0, y: 0 };
     localStorage.removeItem('app_torso_grid_offsets');
-    statusDiv.innerText = "Punctele de modulație au fost resetate!";
+    localStorage.removeItem('app_head_drag_offset');
+    statusDiv.innerText = "Toate modificările au fost resetate!";
   });
 
   // Media Inputs
@@ -548,7 +584,7 @@
     }
   });
 
-  // Funcție de Rendersare pe Triunghi (Affine Texture Warp Transformation)
+  // Renderare Triunghi Deformat cu Textură (Affine Texture Transformation)
   function drawTexturedTriangle(ctx, img, x0, y0, x1, y1, x2, y2, u0, v0, u1, v1, u2, v2) {
     ctx.save();
     ctx.beginPath();
@@ -579,13 +615,13 @@
     ctx.restore();
   }
 
-  // Deformare Rețea (Mesh Warp) 4x4 Puncte pentru Torso
-  function drawWarpedTorsoMesh(ctx, mediaEl, gridPoints) {
+  // Deformare Integrală a Fișierului pe Toate cele 8 Puncte Torso
+  function drawFullWarpedTorso(ctx, mediaEl, gridPoints) {
     if (!mediaEl) return;
     const imgW = mediaEl.videoWidth || mediaEl.width || 100;
     const imgH = mediaEl.videoHeight || mediaEl.height || 100;
 
-    // Suprafața este împărțită în 3 benzi orizontale (4 niveluri de puncte stânga/dreapta)
+    // Suprafața întregului fișier este împarțită în 3 secțiuni orizontale complete
     for (let i = 0; i < 3; i++) {
       const pL0 = gridPoints[i];
       const pL1 = gridPoints[i + 1];
@@ -597,14 +633,14 @@
       const u2 = 0,    v2 = ((i + 1) / 3) * imgH;
       const u3 = imgW, v3 = ((i + 1) / 3) * imgH;
 
-      // Triunghiul 1: Top-Left, Top-Right, Bottom-Left
+      // Triunghiul Stânga (Top-Left, Top-Right, Bottom-Left)
       drawTexturedTriangle(ctx, mediaEl, pL0.x, pL0.y, pR0.x, pR0.y, pL1.x, pL1.y, u0, v0, u1, v1, u2, v2);
-      // Triunghiul 2: Top-Right, Bottom-Right, Bottom-Left
+      // Triunghiul Dreapta (Top-Right, Bottom-Right, Bottom-Left)
       drawTexturedTriangle(ctx, mediaEl, pR0.x, pR0.y, pR1.x, pR1.y, pL1.x, pL1.y, u1, v1, u3, v3, u2, v2);
     }
   }
 
-  // Brațe Cadre Dublate
+  // Brațe
   function drawFramedSegment(ctx, assetObj, p1, p2, thickness = 40) {
     if (!assetObj || !assetObj.element) return;
     const element = assetObj.element;
@@ -647,7 +683,7 @@
     canvasCtx.globalCompositeOperation = 'source-over';
     canvasCtx.clearRect(0, 0, w, h);
 
-    // 1. Fundal & Crop
+    // 1. Fundal & Crop AI
     if (hideCamera) {
       if (bgType === 'image' && customBgImg) canvasCtx.drawImage(customBgImg, 0, 0, w, h);
       else if (bgType === 'video' && bgVideoElement.readyState >= 2) canvasCtx.drawImage(bgVideoElement, 0, 0, w, h);
@@ -670,7 +706,7 @@
       canvasCtx.drawImage(results.image, 0, 0, w, h);
     }
 
-    // 2. Ancorare Puncte Rigging
+    // 2. Ancorare Puncte Tracking
     if (results.poseLandmarks) {
       const lm = results.poseLandmarks;
 
@@ -688,11 +724,11 @@
 
       const shoulderWidth = Math.hypot(pts.rightShoulder.x - pts.leftShoulder.x, pts.rightShoulder.y - pts.leftShoulder.y);
 
-      // Calculare 8 Baze pentru Rețeaua Torso (4 Puncte Stânga, 4 Puncte Dreapta)
+      // Calculare 8 Baze Torso
       activeTorsoPoints = [];
       for (let i = 0; i < 4; i++) {
         const ratio = i / 3;
-        // Partea Stângă
+        // Stânga
         const baseLx = pts.leftShoulder.x + (pts.leftHip.x - pts.leftShoulder.x) * ratio;
         const baseLy = pts.leftShoulder.y + (pts.leftHip.y - pts.leftShoulder.y) * ratio;
         activeTorsoPoints[i] = {
@@ -701,7 +737,7 @@
           base: { x: baseLx, y: baseLy }
         };
 
-        // Partea Dreaptă
+        // Dreapta
         const baseRx = pts.rightShoulder.x + (pts.rightHip.x - pts.rightShoulder.x) * ratio;
         const baseRy = pts.rightShoulder.y + (pts.rightHip.y - pts.rightShoulder.y) * ratio;
         activeTorsoPoints[i + 4] = {
@@ -711,17 +747,25 @@
         };
       }
 
-      // A. CAP (Foto/Video)
+      // A. CAP (Foto/Video + Drag Direct Mouse + Mouse Wheel Zoom)
+      currentHeadCenter = {
+        x: pts.nose.x + headOffset.x,
+        y: pts.nose.y + headOffset.y,
+        baseX: pts.nose.x,
+        baseY: pts.nose.y,
+        r: (shoulderWidth * 0.6) * puppetScales.head
+      };
+
       if (partVis.head && segmentAssets.head.element) {
         const headW = shoulderWidth * 1.2 * puppetScales.head;
         const el = segmentAssets.head.element;
         const headH = (el.videoHeight || el.height || 1) / (el.videoWidth || el.width || 1) * headW;
-        canvasCtx.drawImage(el, pts.nose.x - headW/2, pts.nose.y - headH/2, headW, headH);
+        canvasCtx.drawImage(el, currentHeadCenter.x - headW/2, currentHeadCenter.y - headH/2, headW, headH);
       }
 
-      // B. TORSO WARP MESH (Modulare Foto/Video pe Rețeaua de 8 Puncte)
+      // B. TORSO FULL WARP MESH (Acoperă integral tot fișierul pe toate cele 8 puncte)
       if (partVis.torso && segmentAssets.torso.element) {
-        drawWarpedTorsoMesh(canvasCtx, segmentAssets.torso.element, activeTorsoPoints);
+        drawFullWarpedTorso(canvasCtx, segmentAssets.torso.element, activeTorsoPoints);
       }
 
       // C. BRAȚE
@@ -737,14 +781,14 @@
 
       // D. MODEL 3D
       if (show3D && model3DData) {
-        render3DAsset(model3DData, pts.nose.x, pts.nose.y, puppetScales.head);
+        render3DAsset(model3DData, currentHeadCenter.x, currentHeadCenter.y, puppetScales.head);
         threeRenderer.render(threeScene, threeCamera);
         canvasCtx.drawImage(threeRenderer.domElement, 0, 0);
       }
 
-      // 3. LINII TRACKING & PUNCTE DE MODULAȚIE
+      // 3. LINII TRACKING & GHIDAJ INTERACTIV
       if (showSkeleton) {
-        // Desenare Linii Rețea Mesh Torso
+        // Linii Rețea Torso
         canvasCtx.strokeStyle = '#00ffcc';
         canvasCtx.lineWidth = 1.5;
         for (let i = 0; i < 3; i++) {
@@ -759,48 +803,29 @@
           canvasCtx.stroke();
         }
 
-        // Puncte de Modulație Torso (Inel cu Culoare Interactivă)
+        // Puncte de Modulație Torso
         activeTorsoPoints.forEach((pt, idx) => {
           canvasCtx.beginPath();
           canvasCtx.arc(pt.x, pt.y, 8, 0, 2 * Math.PI);
-          canvasCtx.fillStyle = (idx === draggingTorsoPointIndex) ? '#ff0055' : '#00ffcc';
+          canvasCtx.fillStyle = (activeTarget && activeTarget.type === 'torso' && activeTarget.index === idx) ? '#ff0055' : '#00ffcc';
           canvasCtx.strokeStyle = '#ffffff';
           canvasCtx.lineWidth = 2;
           canvasCtx.fill();
           canvasCtx.stroke();
         });
 
-        // Brațe
-        const drawArmFrame = (p1, p2, width) => {
-          const dx = p2.x - p1.x;
-          const dy = p2.y - p1.y;
-          const len = Math.hypot(dx, dy);
-          if (len < 5) return;
-          const nx = -dy / len * (width / 2);
-          const ny = dx / len * (width / 2);
-
-          canvasCtx.beginPath();
-          canvasCtx.moveTo(p1.x + nx, p1.y + ny);
-          canvasCtx.lineTo(p2.x + nx, p2.y + ny);
-          canvasCtx.lineTo(p2.x - nx, p2.y - ny);
-          canvasCtx.lineTo(p1.x - nx, p1.y - ny);
-          canvasCtx.closePath();
-          canvasCtx.strokeStyle = '#ff0055';
-          canvasCtx.lineWidth = 1.5;
-          canvasCtx.stroke();
-        };
-
-        drawArmFrame(pts.leftShoulder, pts.leftElbow, 30 * puppetScales.arms);
-        drawArmFrame(pts.leftElbow, pts.leftWrist, 25 * puppetScales.arms);
-        drawArmFrame(pts.rightShoulder, pts.rightElbow, 30 * puppetScales.arms);
-        drawArmFrame(pts.rightElbow, pts.rightWrist, 25 * puppetScales.arms);
-
-        // Cap
+        // Cerc Ghidaj Cap (Punct Ancoră Mutabil)
         canvasCtx.beginPath();
-        canvasCtx.arc(pts.nose.x, pts.nose.y, shoulderWidth * 0.35, 0, 2 * Math.PI);
-        canvasCtx.strokeStyle = '#00f2fe';
-        canvasCtx.lineWidth = 1.5;
+        canvasCtx.arc(currentHeadCenter.x, currentHeadCenter.y, currentHeadCenter.r, 0, 2 * Math.PI);
+        canvasCtx.strokeStyle = (activeTarget && activeTarget.type === 'head') ? '#ff0055' : '#00f2fe';
+        canvasCtx.lineWidth = 2;
         canvasCtx.stroke();
+
+        // Punct Centru Cap
+        canvasCtx.beginPath();
+        canvasCtx.arc(currentHeadCenter.x, currentHeadCenter.y, 6, 0, 2 * Math.PI);
+        canvasCtx.fillStyle = '#00f2fe';
+        canvasCtx.fill();
       }
     }
 
@@ -812,7 +837,7 @@
     canvasCtx.restore();
   });
 
-  // Start Engine
+  // Start Camera
   startBtn.addEventListener('click', async () => {
     statusDiv.innerText = "Se pornește camera...";
     startBtn.style.display = 'none';
@@ -822,7 +847,7 @@
       height: 720
     });
     await camera.start();
-    statusDiv.innerText = "Sistem Activ • Modulație Torso Mesh Pregătită!";
+    statusDiv.innerText = "Sistem Activ • Full Torso Warp & Interactive Head Ready!";
   });
 </script>
 
