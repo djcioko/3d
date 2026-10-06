@@ -1,709 +1,334 @@
 <!DOCTYPE html>
 <html lang="ro">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>2D & 3D Puppet Rigging - v2.3 PNG + GLB Dual Engine</title>
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-    html, body {
-      width: 100vw;
-      height: 100vh;
-      overflow: hidden;
-      background-color: #08080c;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
-    #container {
-      position: relative;
-      width: 100vw;
-      height: 100vh;
-    }
-    #webcam, #output_canvas, #bg-video {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      object-fit: cover;
-    }
-    #webcam, #bg-video {
-      display: none;
-    }
-    #output_canvas {
-      z-index: 2;
-      transform: scaleX(-1);
-      cursor: crosshair;
-    }
-
-    /* Control Panel */
-    #ui-overlay {
-      position: absolute;
-      top: 15px;
-      left: 15px;
-      z-index: 10;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      width: 370px;
-      max-height: 92vh;
-      overflow-y: auto;
-      background: rgba(15, 15, 25, 0.92);
-      padding: 15px;
-      border-radius: 12px;
-      border: 1px solid rgba(0, 255, 204, 0.3);
-      backdrop-filter: blur(10px);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-    }
-
-    .btn-main {
-      background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
-      color: #000;
-      border: none;
-      padding: 12px 16px;
-      font-size: 14px;
-      font-weight: bold;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-    .btn-main:hover {
-      transform: scale(1.02);
-    }
-
-    .btn-toggle {
-      background: rgba(255, 255, 255, 0.1);
-      color: #fff;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      padding: 5px 8px;
-      font-size: 11px;
-      border-radius: 6px;
-      cursor: pointer;
-      min-width: 65px;
-      text-align: center;
-    }
-    .btn-toggle.active {
-      background: rgba(0, 255, 204, 0.3);
-      border-color: #00ffcc;
-      color: #00ffcc;
-      font-weight: bold;
-    }
-
-    .upload-group {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      border-top: 1px solid rgba(255, 255, 255, 0.1);
-      padding-top: 10px;
-    }
-    .upload-group label {
-      color: #00ffcc;
-      font-size: 11px;
-      font-weight: bold;
-      text-transform: uppercase;
-    }
-    .file-input {
-      color: #ccc;
-      font-size: 11px;
-      flex: 1;
-    }
-
-    .row-btns {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-
-    .item-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .scale-controls {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: #fff;
-      font-size: 11px;
-    }
-    .scale-controls input[type="range"] {
-      flex: 1;
-    }
-
-    #status {
-      color: #00ffcc;
-      font-size: 12px;
-      font-weight: bold;
-    }
-  </style>
-
-  <!-- MediaPipe -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WebAR MoCap Hybrid v3 — 2D/3D Multi-Layer & Control Hide</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"
+  }
+}
+</script>
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: rgba(23, 28, 36, 0.92);
+    --line: #2a3342;
+    --text: #e8edf5;
+    --muted: #93a0b5;
+    --accent: #3ddc97;
+    --danger: #ff5d73;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+  body { display: grid; grid-template-columns: minmax(0, 1fr) 360px; height: 100vh; }
   
-  <!-- Three.js pentru Renderare Modele 3D GLB/GLTF -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  /* Când UI este ascuns */
+  body.hide-ui { grid-template-columns: 1fr !important; }
+  body.hide-ui #panel, body.hide-ui #hud { display: none !important; }
+  
+  #stage { position: relative; background: #000; overflow: hidden; }
+  #video, #overlay, #three { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #video { object-fit: cover; transform: scaleX(-1); }
+  #overlay, #three { pointer-events: none; }
+  
+  #toggle-ui-floating {
+    position: absolute; right: 12px; top: 12px; z-index: 100;
+    background: rgba(0,0,0,0.7); color: var(--accent); border: 1px solid var(--line);
+    padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: bold;
+    backdrop-filter: blur(4px);
+  }
+
+  #hud {
+    position: absolute; left: 12px; top: 12px; z-index: 5;
+    background: rgba(8, 10, 14, 0.75); border: 1px solid var(--line);
+    border-radius: 10px; padding: 10px; max-width: 400px; backdrop-filter: blur(8px);
+  }
+  #status { color: var(--accent); font-weight: 600; font-size: 13px; }
+  #status.err { color: var(--danger); }
+
+  #panel {
+    background: var(--panel); border-left: 1px solid var(--line);
+    overflow-y: auto; padding: 14px; z-index: 10; backdrop-filter: blur(10px);
+  }
+  h1 { font-size: 16px; margin: 0 0 6px; }
+  h2 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 14px 0 6px; }
+  .row { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+  .row label { flex: 1; color: var(--muted); font-size: 12px; }
+  
+  button, .filebtn {
+    background: #222a36; color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 12px;
+  }
+  button.on { background: #143628; border-color: #1f6b48; color: var(--accent); }
+  button.primary { background: #145c40; border-color: #1f8a5b; color: white; width: 100%; }
+  input[type="range"] { width: 120px; }
+  
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin: 6px 0; background: #121820; }
+  .card h3 { margin: 0 0 6px; font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
+</style>
 </head>
 <body>
 
-<div id="container">
-  <div id="ui-overlay">
-    <button id="start-btn" class="btn-main">▶ Pornire Engine 2D/3D v2.3</button>
-    <div id="status">Apasă pe buton pentru start...</div>
+  <button id="toggle-ui-floating" type="button">👁 Toggle UI (H)</button>
 
-    <!-- Switchuri Globale Layer-e -->
-    <div class="upload-group">
-      <label>Comutatoare Generale</label>
-      <div class="row-btns">
-        <button id="toggle-skeleton" class="btn-toggle active">Linii Tracking: ON</button>
-        <button id="toggle-crop" class="btn-toggle active">Crop AI: ON</button>
-        <button id="reset-offsets" class="btn-toggle" style="border-color:#ff0055; color:#ff3366;">Reset Calibrare</button>
-      </div>
-    </div>
-
-    <!-- Upload PNG & GLB pe Fiecare Fragment -->
-    <div class="upload-group">
-      <label>Încărcare Fișiere (PNG / JPG / GLB / GLTF)</label>
-      
-      <!-- 1. CAP -->
-      <div class="item-row">
-        <button id="tog-head" class="btn-toggle active">Cap: ON</button>
-        <input type="file" id="file-head" accept="image/*,.glb,.gltf" class="file-input">
-      </div>
-
-      <!-- 2. TORSO -->
-      <div class="item-row">
-        <button id="tog-torso" class="btn-toggle active">Torso: ON</button>
-        <input type="file" id="file-torso" accept="image/*,.glb,.gltf" class="file-input">
-      </div>
-
-      <!-- 3. BRAȚ STÂNG -->
-      <div class="item-row">
-        <button id="tog-arm-left" class="btn-toggle active">Braț L: ON</button>
-        <input type="file" id="file-arm-left" accept="image/*,.glb,.gltf" class="file-input">
-      </div>
-
-      <!-- 4. BRAȚ DREPT -->
-      <div class="item-row">
-        <button id="tog-arm-right" class="btn-toggle active">Braț R: ON</button>
-        <input type="file" id="file-arm-right" accept="image/*,.glb,.gltf" class="file-input">
-      </div>
-    </div>
-
-    <!-- Ajustări Free-Form Mască / Cap -->
-    <div class="upload-group">
-      <label>Calibrare Free-Form Cap (Scală & Offsets)</label>
-      <div class="scale-controls">
-        <span>Scală Cap:</span>
-        <input type="range" id="scale-head" min="0.3" max="3.0" step="0.05" value="1.0">
-      </div>
-      <div class="scale-controls">
-        <span>Ajustare Y (Sus / Jos):</span>
-        <input type="range" id="offset-head-y" min="-150" max="150" step="2" value="0">
-      </div>
-      <div class="scale-controls">
-        <span>Ajustare X (Stânga / Dreapta):</span>
-        <input type="range" id="offset-head-x" min="-150" max="150" step="2" value="0">
-      </div>
-    </div>
-
-    <!-- Scalare Corp -->
-    <div class="upload-group">
-      <label>Scalare Torso & Brațe</label>
-      <div class="scale-controls">
-        <span>Scală Torso:</span>
-        <input type="range" id="scale-torso" min="0.5" max="3.0" step="0.1" value="1.0">
-      </div>
-      <div class="scale-controls">
-        <span>Grosime Brațe:</span>
-        <input type="range" id="scale-arms" min="0.5" max="3.0" step="0.1" value="1.0">
-      </div>
-    </div>
-
-    <!-- Fundal -->
-    <div class="upload-group">
-      <label>Fundal Custom</label>
-      <input type="file" id="bg-file-upload" accept="image/*,video/*" class="file-input">
+  <div id="stage">
+    <video id="video" playsinline autoplay muted></video>
+    <canvas id="overlay"></canvas>
+    <canvas id="three"></canvas>
+    
+    <div id="hud">
+      <div id="status">Se încarcă engine-ul Hybrid 2D/3D...</div>
     </div>
   </div>
 
-  <video id="webcam" autoplay playsinline muted></video>
-  <video id="bg-video" autoplay loop muted playsinline></video>
-  <canvas id="output_canvas"></canvas>
-</div>
+  <aside id="panel">
+    <h1>WebAR MoCap Studio</h1>
+    <button id="btnCam" class="primary" type="button" style="margin-bottom: 10px;">▶ Pornește Camera</button>
 
-<script>
-  const videoElement = document.getElementById('webcam');
-  const bgVideoElement = document.getElementById('bg-video');
-  const canvasElement = document.getElementById('output_canvas');
-  const canvasCtx = canvasElement.getContext('2d');
+    <h2>Setări Afișare</h2>
+    <div class="row">
+      <button id="btnMirror" class="on">Mirror</button>
+      <button id="togSkel" class="on">Skeleton</button>
+      <button id="tog3D" class="on">Render 3D</button>
+    </div>
 
-  const startBtn = document.getElementById('start-btn');
-  const statusDiv = document.getElementById('status');
-  const resetBtn = document.getElementById('reset-offsets');
+    <h2>Sloturi Membre (2D PNG sau 3D GLB)</h2>
+    <div id="partCards"></div>
 
-  // Toggle BTNs Globale
-  const toggleSkeletonBtn = document.getElementById('toggle-skeleton');
-  const toggleCropBtn = document.getElementById('toggle-crop');
+    <h2>Persistență Setări</h2>
+    <div class="row">
+      <button id="btnSave" class="primary" type="button">Salvează Setări</button>
+      <button id="btnReset" type="button" style="width: 100%;">Reset</button>
+    </div>
+  </aside>
 
-  // Toggle BTNs Individuale
-  const togHeadBtn = document.getElementById('tog-head');
-  const togTorsoBtn = document.getElementById('tog-torso');
-  const togArmLeftBtn = document.getElementById('tog-arm-left');
-  const togArmRightBtn = document.getElementById('tog-arm-right');
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { PoseLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.17/vision_bundle.mjs";
 
-  // Inputs
-  const inputHead = document.getElementById('file-head');
-  const inputTorso = document.getElementById('file-torso');
-  const inputArmLeft = document.getElementById('file-arm-left');
-  const inputArmRight = document.getElementById('file-arm-right');
-  const bgFileUpload = document.getElementById('bg-file-upload');
+const PARTS = [
+  { id: "head", label: "Cap (Head)", lmIndex: 0 },
+  { id: "torso", label: "Trunchi (Torso)", lmIndex: 11 },
+  { id: "armL", label: "Braț Stâng", lmIndex: 11 },
+  { id: "armR", label: "Braț Drept", lmIndex: 12 }
+];
 
-  // Sliders
-  const sliderHead = document.getElementById('scale-head');
-  const sliderHeadY = document.getElementById('offset-head-y');
-  const sliderHeadX = document.getElementById('offset-head-x');
-  const sliderTorso = document.getElementById('scale-torso');
-  const sliderArms = document.getElementById('scale-arms');
-
-  // Stări ON / OFF
-  let showSkeleton = localStorage.getItem('app_showSkeleton') !== 'false';
-  let enableCrop = localStorage.getItem('app_crop') !== 'false';
-
-  const partVis = {
-    head: localStorage.getItem('app_vis_head') !== 'false',
-    torso: localStorage.getItem('app_vis_torso') !== 'false',
-    armLeft: localStorage.getItem('app_vis_armLeft') !== 'false',
-    armRight: localStorage.getItem('app_vis_armRight') !== 'false'
-  };
-
-  let shoulderOffsets = JSON.parse(localStorage.getItem('app_shoulder_offsets')) || {
-    left: { x: 0, y: 0 },
-    right: { x: 0, y: 0 }
-  };
-
-  let headOffsetY = parseFloat(localStorage.getItem('app_head_offset_y')) || 0;
-  let headOffsetX = parseFloat(localStorage.getItem('app_head_offset_x')) || 0;
-
-  sliderHeadY.value = headOffsetY;
-  sliderHeadX.value = headOffsetX;
-
-  let bgType = 'none';
-  let customBgImg = null;
-
-  // Stocare Active (Suportă 2D & 3D)
-  const puppetAssets = {
-    head: { type: null, data: null },
-    torso: { type: null, data: null },
-    armLeft: { type: null, data: null },
-    armRight: { type: null, data: null }
-  };
-
-  const puppetScales = { head: 1.0, torso: 1.0, arms: 1.0 };
-
-  // Three.js Offscreen Scene pentru renderare modele 3D
-  const threeScene = new THREE.Scene();
-  const threeCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000);
-  threeCamera.position.z = 5;
-  const threeRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-  threeRenderer.setSize(window.innerWidth, window.innerHeight);
-
-  const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
-  threeScene.add(ambientLight);
-  const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-  dirLight.position.set(0, 1, 2);
-  threeScene.add(dirLight);
-
-  const gltfLoader = new THREE.GLTFLoader();
-
-  const maskCanvas = document.createElement('canvas');
-  const maskCtx = maskCanvas.getContext('2d');
-
-  function resizeCanvas() {
-    canvasElement.width = window.innerWidth;
-    canvasElement.height = window.innerHeight;
-    maskCanvas.width = window.innerWidth;
-    maskCanvas.height = window.innerHeight;
-    threeRenderer.setSize(window.innerWidth, window.innerHeight);
-    threeCamera.left = -window.innerWidth / 2;
-    threeCamera.right = window.innerWidth / 2;
-    threeCamera.top = window.innerHeight / 2;
-    threeCamera.bottom = -window.innerHeight / 2;
-    threeCamera.updateProjectionMatrix();
+const settings = {
+  mirror: true,
+  showSkel: true,
+  show3D: true,
+  uiVisible: true,
+  parts: {
+    head: { scale: 1, ox: 0, oy: 0, enabled: true, type: 'none' },
+    torso: { scale: 1, ox: 0, oy: 0, enabled: true, type: 'none' },
+    armL: { scale: 1, ox: 0, oy: 0, enabled: true, type: 'none' },
+    armR: { scale: 1, ox: 0, oy: 0, enabled: true, type: 'none' }
   }
-  window.addEventListener('resize', resizeCanvas);
-  resizeCanvas();
+};
 
-  // Mouse Drag for Shoulder Calibration
-  let draggingPoint = null;
-  let currentPoints = {};
+const statusEl = document.getElementById("status");
+const video = document.getElementById("video");
+const overlay = document.getElementById("overlay");
+const octx = overlay.getContext("2d");
+const threeCanvas = document.getElementById("three");
+const stage = document.getElementById("stage");
 
-  canvasElement.addEventListener('mousedown', (e) => {
-    const rect = canvasElement.getBoundingClientRect();
-    const mouseX = rect.width - (e.clientX - rect.left);
-    const mouseY = e.clientY - rect.top;
+let poseLandmarker = null;
+let cameraOn = false;
+let latestWorld = null;
+let latestLm = null;
 
-    if (currentPoints.leftShoulder && Math.hypot(mouseX - currentPoints.leftShoulder.x, mouseY - currentPoints.leftShoulder.y) < 25) {
-      draggingPoint = 'leftShoulder';
-    } else if (currentPoints.rightShoulder && Math.hypot(mouseX - currentPoints.rightShoulder.x, mouseY - currentPoints.rightShoulder.y) < 25) {
-      draggingPoint = 'rightShoulder';
-    }
+// IndexedDB Helper
+function openDb() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open("webar-mocap-v3", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("assets");
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+async function saveAsset(key, blob) {
+  const db = await openDb();
+  const tx = db.transaction("assets", "readwrite");
+  tx.objectStore("assets").put(blob, key);
+}
+async function getAsset(key) {
+  const db = await openDb();
+  return new Promise((res) => {
+    const req = db.transaction("assets", "readonly").objectStore("assets").get(key);
+    req.onsuccess = () => res(req.result);
+  });
+}
+
+// Three.js Scene Setup
+const renderer = new THREE.WebGLRenderer({ canvas: threeCanvas, alpha: true, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+camera.position.set(0, 0, 3);
+
+// Lumini optimizate pentru GLB
+scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+dirLight.position.set(1, 2, 3);
+scene.add(dirLight);
+
+const gltfLoader = new GLTFLoader();
+const loadedModels = {};
+const loadedImages = {};
+
+function resize() {
+  const w = stage.clientWidth;
+  const h = stage.clientHeight;
+  overlay.width = w;
+  overlay.height = h;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / Math.max(1, h);
+  camera.updateProjectionMatrix();
+}
+window.addEventListener("resize", resize);
+resize();
+
+// Toggle UI (Ascunde / Arată panoul)
+function toggleUI() {
+  settings.uiVisible = !settings.uiVisible;
+  document.body.classList.toggle("hide-ui", !settings.uiVisible);
+}
+document.getElementById("toggle-ui-floating").addEventListener("click", toggleUI);
+window.addEventListener("keydown", (e) => {
+  if (e.key === 'h' || e.key === 'H') toggleUI();
+});
+
+// Încărcare Asset-uri (2D / 3D)
+async function loadPartFile(partId, file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  const buffer = await file.arrayBuffer();
+  await saveAsset(partId, new Blob([buffer]));
+
+  if (ext === 'glb' || ext === 'gltf') {
+    gltfLoader.parse(buffer, '', (gltf) => {
+      if (loadedModels[partId]) scene.remove(loadedModels[partId]);
+      loadedModels[partId] = gltf.scene;
+      scene.add(gltf.scene);
+      settings.parts[partId].type = '3d';
+      statusEl.textContent = `Model 3D încărcat pentru ${partId}`;
+    });
+  } else {
+    const url = URL.createObjectURL(new Blob([buffer]));
+    const img = new Image();
+    img.onload = () => {
+      loadedImages[partId] = img;
+      settings.parts[partId].type = '2d';
+      statusEl.textContent = `Imagine 2D încărcată pentru ${partId}`;
+    };
+    img.src = url;
+  }
+}
+
+function buildUI() {
+  const container = document.getElementById("partCards");
+  container.innerHTML = "";
+  PARTS.forEach(p => {
+    const st = settings.parts[p.id];
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <h3>${p.label}</h3>
+      <div class="row">
+        <input type="file" accept=".glb,.gltf,image/*" data-id="${p.id}" class="file-input" />
+      </div>
+      <div class="row">
+        <label>Scală</label>
+        <input type="range" min="0.2" max="3" step="0.05" value="${st.scale}" data-k="scale" data-id="${p.id}" />
+      </div>
+    `;
+    container.appendChild(card);
   });
 
-  canvasElement.addEventListener('mousemove', (e) => {
-    if (!draggingPoint || !currentPoints.rawLeftShoulder) return;
-    const rect = canvasElement.getBoundingClientRect();
-    const mouseX = rect.width - (e.clientX - rect.left);
-    const mouseY = e.clientY - rect.top;
-
-    if (draggingPoint === 'leftShoulder') {
-      shoulderOffsets.left.x = mouseX - currentPoints.rawLeftShoulder.x;
-      shoulderOffsets.left.y = mouseY - currentPoints.rawLeftShoulder.y;
-    } else if (draggingPoint === 'rightShoulder') {
-      shoulderOffsets.right.x = mouseX - currentPoints.rawRightShoulder.x;
-      shoulderOffsets.right.y = mouseY - currentPoints.rawRightShoulder.y;
-    }
-    localStorage.setItem('app_shoulder_offsets', JSON.stringify(shoulderOffsets));
+  container.addEventListener("input", (e) => {
+    const id = e.target.dataset.id;
+    const key = e.target.dataset.k;
+    if (id && key) settings.parts[id][key] = parseFloat(e.target.value);
   });
 
-  window.addEventListener('mouseup', () => { draggingPoint = null; });
-
-  resetBtn.addEventListener('click', () => {
-    shoulderOffsets = { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } };
-    headOffsetY = 0; headOffsetX = 0;
-    sliderHeadY.value = 0; sliderHeadX.value = 0;
-    localStorage.removeItem('app_shoulder_offsets');
-    localStorage.removeItem('app_head_offset_y');
-    localStorage.removeItem('app_head_offset_x');
-    statusDiv.innerText = "Calibrare resatată!";
+  container.addEventListener("change", (e) => {
+    const id = e.target.dataset.id;
+    if (id && e.target.files[0]) loadPartFile(id, e.target.files[0]);
   });
+}
 
-  // Încărcător Universal (PNG 2D & GLB 3D)
-  function handleFileInput(inputEl, storageKey, objKey) {
-    inputEl.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
+// MediaPipe & Camera Init
+async function init() {
+  const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.17/wasm");
+  poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+    baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task", delegate: "GPU" },
+    runningMode: "VIDEO", numPoses: 1
+  });
+  statusEl.textContent = "Sistem Pregătit. Pornește Camera.";
+}
 
-      const fileName = file.name.toLowerCase();
-      const reader = new FileReader();
+document.getElementById("btnCam").addEventListener("click", async () => {
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+  video.srcObject = stream;
+  await video.play();
+  cameraOn = true;
+  statusEl.textContent = "Urmărire AI Activă.";
+});
 
-      if (fileName.endsWith('.glb') || fileName.endsWith('.gltf')) {
-        reader.onload = (event) => {
-          const arrayBuffer = event.target.result;
-          gltfLoader.parse(arrayBuffer, '', (gltf) => {
-            if (puppetAssets[objKey].data && puppetAssets[objKey].type === '3d') {
-              threeScene.remove(puppetAssets[objKey].data);
-            }
-            const model = gltf.scene;
-            threeScene.add(model);
-            puppetAssets[objKey] = { type: '3d', data: model };
-            statusDiv.innerText = `Model 3D GLB încărcat pt ${objKey}!`;
-          });
-        };
-        reader.readAsArrayBuffer(file);
-      } else {
-        reader.onload = (event) => {
-          const dataUrl = event.target.result;
-          const img = new Image();
-          img.onload = () => {
-            if (puppetAssets[objKey].data && puppetAssets[objKey].type === '3d') {
-              threeScene.remove(puppetAssets[objKey].data);
-            }
-            puppetAssets[objKey] = { type: '2d', data: img };
-            statusDiv.innerText = `Imagine 2D încărcată pt ${objKey}!`;
-          };
-          img.src = dataUrl;
-          try { localStorage.setItem(storageKey, dataUrl); } catch(e){}
-        };
-        reader.readAsDataURL(file);
+function renderLoop() {
+  requestAnimationFrame(renderLoop);
+  if (cameraOn && video.readyState >= 2) {
+    const res = poseLandmarker.detectForVideo(video, performance.now());
+    latestWorld = res.worldLandmarks ? res.worldLandmarks[0] : null;
+    latestLm = res.landmarks ? res.landmarks[0] : null;
+  }
+
+  octx.clearRect(0, 0, overlay.width, overlay.height);
+
+  if (latestWorld && settings.show3D) {
+    // Pozitionare Modele 3D (GLB)
+    PARTS.forEach(p => {
+      const model = loadedModels[p.id];
+      if (model && settings.parts[p.id].type === '3d') {
+        const lm = latestWorld[p.lmIndex];
+        model.position.set(-lm.x * 2, -lm.y * 2, -lm.z * 2);
+        const s = settings.parts[p.id].scale;
+        model.scale.set(s, s, s);
       }
     });
+    renderer.render(scene, camera);
   }
 
-  handleFileInput(inputHead, 'app_file_head', 'head');
-  handleFileInput(inputTorso, 'app_file_torso', 'torso');
-  handleFileInput(inputArmLeft, 'app_file_arm_left', 'armLeft');
-  handleFileInput(inputArmRight, 'app_file_arm_right', 'armRight');
-
-  window.addEventListener('load', () => {
-    ['head', 'torso', 'arm_left', 'arm_right'].forEach(part => {
-      const saved = localStorage.getItem(`app_file_${part}`);
-      const keyMap = { head: 'head', torso: 'torso', arm_left: 'armLeft', arm_right: 'armRight' };
-      if (saved) {
-        const img = new Image();
-        img.onload = () => puppetAssets[keyMap[part]] = { type: '2d', data: img };
-        img.src = saved;
-      }
-    });
-
-    updateBtnState(togHeadBtn, partVis.head, "Cap");
-    updateBtnState(togTorsoBtn, partVis.torso, "Torso");
-    updateBtnState(togArmLeftBtn, partVis.armLeft, "Braț L");
-    updateBtnState(togArmRightBtn, partVis.armRight, "Braț R");
-    updateBtnState(toggleSkeletonBtn, showSkeleton, "Linii Tracking");
-    updateBtnState(toggleCropBtn, enableCrop, "Crop AI");
-  });
-
-  function updateBtnState(btn, state, label) {
-    btn.classList.toggle('active', state);
-    btn.innerText = `${label}: ${state ? 'ON' : 'OFF'}`;
-  }
-
-  function bindToggle(btn, key, label, isGlobal = false) {
-    btn.addEventListener('click', () => {
-      if (isGlobal) {
-        if (key === 'skeleton') { showSkeleton = !showSkeleton; localStorage.setItem('app_showSkeleton', showSkeleton); updateBtnState(btn, showSkeleton, label); }
-        if (key === 'crop') { enableCrop = !enableCrop; localStorage.setItem('app_crop', enableCrop); updateBtnState(btn, enableCrop, label); }
-      } else {
-        partVis[key] = !partVis[key];
-        localStorage.setItem(`app_vis_${key}`, partVis[key]);
-        updateBtnState(btn, partVis[key], label);
-      }
+  // Render Skeleton 2D
+  if (latestLm && settings.showSkel) {
+    octx.fillStyle = "#3ddc97";
+    latestLm.forEach(lm => {
+      const x = (settings.mirror ? 1 - lm.x : lm.x) * overlay.width;
+      const y = lm.y * overlay.height;
+      octx.beginPath();
+      octx.arc(x, y, 4, 0, Math.PI * 2);
+      octx.fill();
     });
   }
+}
 
-  bindToggle(togHeadBtn, 'head', 'Cap');
-  bindToggle(togTorsoBtn, 'torso', 'Torso');
-  bindToggle(togArmLeftBtn, 'armLeft', 'Braț L');
-  bindToggle(togArmRightBtn, 'armRight', 'Braț R');
-  bindToggle(toggleSkeletonBtn, 'skeleton', 'Linii Tracking', true);
-  bindToggle(toggleCropBtn, 'crop', 'Crop AI', true);
+document.getElementById("btnSave").addEventListener("click", () => {
+  localStorage.setItem("webar-settings-v3", JSON.stringify(settings));
+  statusEl.textContent = "Setări salvate cu succes!";
+});
 
-  sliderHead.addEventListener('input', (e) => puppetScales.head = parseFloat(e.target.value));
-  sliderTorso.addEventListener('input', (e) => puppetScales.torso = parseFloat(e.target.value));
-  sliderArms.addEventListener('input', (e) => puppetScales.arms = parseFloat(e.target.value));
+document.getElementById("btnReset").addEventListener("click", () => {
+  localStorage.removeItem("webar-settings-v3");
+  location.reload();
+});
 
-  sliderHeadY.addEventListener('input', (e) => { headOffsetY = parseFloat(e.target.value); localStorage.setItem('app_head_offset_y', headOffsetY); });
-  sliderHeadX.addEventListener('input', (e) => { headOffsetX = parseFloat(e.target.value); localStorage.setItem('app_head_offset_x', headOffsetX); });
-
-  bgFileUpload.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    if (file.type.startsWith('image/')) {
-      bgType = 'image';
-      bgVideoElement.pause();
-      const img = new Image();
-      img.onload = () => customBgImg = img;
-      img.src = URL.createObjectURL(file);
-    } else if (file.type.startsWith('video/')) {
-      bgType = 'video';
-      bgVideoElement.src = URL.createObjectURL(file);
-      bgVideoElement.play();
-    }
-  });
-
-  // Renderare Segment 2D
-  function drawBoneSegment(ctx, img, p1, p2, scaleFactor = 1.0) {
-    if (!img) return;
-    const dx = p2.x - p1.x;
-    const dy = p2.y - p1.y;
-    const distance = Math.hypot(dx, dy);
-    if (distance < 15) return;
-
-    const angle = Math.atan2(dy, dx);
-    ctx.save();
-    ctx.translate(p1.x, p1.y);
-    ctx.rotate(angle);
-    const drawLength = distance;
-    const drawWidth = (img.height * (drawLength / img.width)) * scaleFactor;
-    ctx.drawImage(img, 0, -drawWidth / 2, drawLength, drawWidth);
-    ctx.restore();
-  }
-
-  // Renderare Model 3D pe Pozitie Canvas
-  function render3DAsset(model, x, y, scale, rotZ = 0) {
-    if (!model) return;
-    const w = canvasElement.width;
-    const h = canvasElement.height;
-    
-    // Convertește coordonatele de pixel în coordonate Three.js Orthographic
-    const threeX = x - w / 2;
-    const threeY = -(y - h / 2);
-
-    model.position.set(threeX, threeY, 0);
-    model.scale.set(scale * 50, scale * 50, scale * 50);
-    model.rotation.z = rotZ;
-  }
-
-  // MediaPipe Setup
-  const holistic = new Holistic({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}` });
-  holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, enableSegmentation: true, smoothSegmentation: true, refineFaceLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
-
-  holistic.onResults((results) => {
-    const w = canvasElement.width;
-    const h = canvasElement.height;
-
-    canvasCtx.save();
-    canvasCtx.clearRect(0, 0, w, h);
-
-    // 1. FUNDAL & CROP AI
-    if (enableCrop && results.segmentationMask) {
-      maskCtx.save();
-      maskCtx.clearRect(0, 0, w, h);
-      maskCtx.drawImage(results.segmentationMask, 0, 0, w, h);
-      maskCtx.globalCompositeOperation = 'source-in';
-      maskCtx.drawImage(results.image, 0, 0, w, h);
-      maskCtx.restore();
-
-      if (bgType === 'image' && customBgImg) canvasCtx.drawImage(customBgImg, 0, 0, w, h);
-      else if (bgType === 'video' && bgVideoElement.readyState >= 2) canvasCtx.drawImage(bgVideoElement, 0, 0, w, h);
-      else { canvasCtx.fillStyle = '#0a0a10'; canvasCtx.fillRect(0, 0, w, h); }
-
-      canvasCtx.drawImage(maskCanvas, 0, 0, w, h);
-    } else {
-      canvasCtx.drawImage(results.image, 0, 0, w, h);
-    }
-
-    // 2. TRACKING & ANCORARE DUAL ENGINE (2D + 3D)
-    if (results.poseLandmarks) {
-      const lm = results.poseLandmarks;
-
-      const rawLeftShoulder = { x: lm[11].x * w, y: lm[11].y * h };
-      const rawRightShoulder = { x: lm[12].x * w, y: lm[12].y * h };
-
-      const pts = {
-        nose:          { x: lm[0].x * w + headOffsetX,  y: lm[0].y * h + headOffsetY },
-        leftShoulder:  { x: rawLeftShoulder.x + shoulderOffsets.left.x, y: rawLeftShoulder.y + shoulderOffsets.left.y },
-        rightShoulder: { x: rawRightShoulder.x + shoulderOffsets.right.x, y: rawRightShoulder.y + shoulderOffsets.right.y },
-        leftElbow:     { x: lm[13].x * w, y: lm[13].y * h },
-        rightElbow:    { x: lm[14].x * w, y: lm[14].y * h },
-        leftWrist:     { x: lm[15].x * w, y: lm[15].y * h },
-        rightWrist:    { x: lm[16].x * w, y: lm[16].y * h },
-        leftHip:       { x: lm[23].x * w, y: lm[23].y * h },
-        rightHip:      { x: lm[24].x * w, y: lm[24].y * h }
-      };
-
-      currentPoints = { ...pts, rawLeftShoulder, rawRightShoulder };
-      const shoulderWidth = Math.hypot(pts.rightShoulder.x - pts.leftShoulder.x, pts.rightShoulder.y - pts.leftShoulder.y);
-
-      let has3D = false;
-
-      // A. CAP (2D sau 3D)
-      if (partVis.head && puppetAssets.head.data) {
-        if (puppetAssets.head.type === '2d') {
-          const headW = shoulderWidth * 1.2 * puppetScales.head;
-          const headH = (puppetAssets.head.data.height / puppetAssets.head.data.width) * headW;
-          canvasCtx.drawImage(puppetAssets.head.data, pts.nose.x - headW/2, pts.nose.y - headH/2, headW, headH);
-        } else if (puppetAssets.head.type === '3d') {
-          render3DAsset(puppetAssets.head.data, pts.nose.x, pts.nose.y, puppetScales.head);
-          has3D = true;
-        }
-      }
-
-      // B. TORSO (2D sau 3D)
-      if (partVis.torso && puppetAssets.torso.data) {
-        const chestCenter = { x: (pts.leftShoulder.x + pts.rightShoulder.x)/2, y: (pts.leftShoulder.y + pts.leftHip.y)/2 };
-        if (puppetAssets.torso.type === '2d') {
-          const torsoW = shoulderWidth * 1.6 * puppetScales.torso;
-          const torsoH = (puppetAssets.torso.data.height / puppetAssets.torso.data.width) * torsoW;
-          canvasCtx.drawImage(puppetAssets.torso.data, chestCenter.x - torsoW/2, chestCenter.y - torsoH/2, torsoW, torsoH);
-        } else if (puppetAssets.torso.type === '3d') {
-          render3DAsset(puppetAssets.torso.data, chestCenter.x, chestCenter.y, puppetScales.torso);
-          has3D = true;
-        }
-      }
-
-      // C. BRAȚE (2D sau 3D)
-      if (partVis.armLeft && puppetAssets.armLeft.data) {
-        if (puppetAssets.armLeft.type === '2d') drawBoneSegment(canvasCtx, puppetAssets.armLeft.data, pts.leftShoulder, pts.leftElbow, puppetScales.arms);
-        else if (puppetAssets.armLeft.type === '3d') { render3DAsset(puppetAssets.armLeft.data, pts.leftShoulder.x, pts.leftShoulder.y, puppetScales.arms); has3D = true; }
-      }
-
-      if (partVis.armRight && puppetAssets.armRight.data) {
-        if (puppetAssets.armRight.type === '2d') drawBoneSegment(canvasCtx, puppetAssets.armRight.data, pts.rightShoulder, pts.rightElbow, puppetScales.arms);
-        else if (puppetAssets.armRight.type === '3d') { render3DAsset(puppetAssets.armRight.data, pts.rightShoulder.x, pts.rightShoulder.y, puppetScales.arms); has3D = true; }
-      }
-
-      // Suprapunere Render 3D peste Canvas
-      if (has3D) {
-        threeRenderer.render(threeScene, threeCamera);
-        canvasCtx.drawImage(threeRenderer.domElement, 0, 0);
-      }
-
-      // --- SKELETON & DRAG HANDLES ---
-      if (showSkeleton) {
-        // Poligon Bust
-        canvasCtx.beginPath();
-        canvasCtx.moveTo(pts.leftShoulder.x, pts.leftShoulder.y);
-        canvasCtx.lineTo(pts.rightShoulder.x, pts.rightShoulder.y);
-        canvasCtx.lineTo(pts.rightHip.x, pts.rightHip.y);
-        canvasCtx.lineTo(pts.leftHip.x, pts.leftHip.y);
-        canvasCtx.closePath();
-        canvasCtx.fillStyle = 'rgba(0, 255, 204, 0.15)';
-        canvasCtx.fill();
-        canvasCtx.strokeStyle = '#00ffcc';
-        canvasCtx.lineWidth = 2;
-        canvasCtx.stroke();
-
-        // Cerc Cap
-        canvasCtx.beginPath();
-        canvasCtx.arc(pts.nose.x, pts.nose.y, shoulderWidth * 0.35, 0, 2 * Math.PI);
-        canvasCtx.strokeStyle = '#00f2fe';
-        canvasCtx.lineWidth = 2;
-        canvasCtx.stroke();
-
-        // Linii Brațe
-        const arms = [
-          [pts.leftShoulder, pts.leftElbow], [pts.leftElbow, pts.leftWrist],
-          [pts.rightShoulder, pts.rightElbow], [pts.rightElbow, pts.rightWrist]
-        ];
-        canvasCtx.strokeStyle = '#ff0055';
-        canvasCtx.lineWidth = 3;
-        arms.forEach(([p1, p2]) => {
-          canvasCtx.beginPath();
-          canvasCtx.moveTo(p1.x, p1.y);
-          canvasCtx.lineTo(p2.x, p2.y);
-          canvasCtx.stroke();
-        });
-
-        // Articulații
-        Object.values(pts).forEach((p) => {
-          canvasCtx.beginPath();
-          canvasCtx.arc(p.x, p.y, 5, 0, 2 * Math.PI);
-          canvasCtx.fillStyle = '#ffff00';
-          canvasCtx.fill();
-          canvasCtx.stroke();
-        });
-
-        // PUNCTE DRAG & DROP UMERI
-        [pts.leftShoulder, pts.rightShoulder].forEach((p) => {
-          canvasCtx.beginPath();
-          canvasCtx.arc(p.x, p.y, 10, 0, 2 * Math.PI);
-          canvasCtx.fillStyle = 'rgba(0, 255, 204, 0.6)';
-          canvasCtx.strokeStyle = '#ffffff';
-          canvasCtx.lineWidth = 2;
-          canvasCtx.fill();
-          canvasCtx.stroke();
-        });
-      }
-    }
-
-    if (showSkeleton) {
-      if (results.leftHandLandmarks) drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS, { color: '#00ffff', lineWidth: 1.5 });
-      if (results.rightHandLandmarks) drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS, { color: '#00ffff', lineWidth: 1.5 });
-    }
-
-    canvasCtx.restore();
-  });
-
-  // Start Camera
-  startBtn.addEventListener('click', async () => {
-    statusDiv.innerText = "Se pornește sistemul...";
-    startBtn.style.display = 'none';
-    let camera = new Camera(videoElement, {
-      onFrame: async () => { await holistic.send({ image: videoElement }); },
-      width: 1280,
-      height: 720
-    });
-    await camera.start();
-    statusDiv.innerText = "v2.3 Activ • Suport 2D PNG & 3D GLB Pregătit!";
-  });
+buildUI();
+init().then(() => renderLoop());
 </script>
-
 </body>
 </html>
