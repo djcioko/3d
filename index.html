@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- Versiunea 1.2: Multi-Layer Upload, Scalare Cap/Față, Control Crop AI & Fullscreen -->
-  <title>Tracking & Multi-Layer System - v1.2</title>
+  <!-- Versiunea 1.3: Crop AI Funcțional, Fundal Foto + Video, PNG Overlay & Tracking -->
+  <title>Tracking & Multi-Layer System - v1.3</title>
   <style>
     * {
       box-sizing: border-box;
@@ -23,23 +23,23 @@
       width: 100vw;
       height: 100vh;
     }
-    #webcam, #output_canvas {
+    #webcam, #output_canvas, #bg-video {
       position: absolute;
       top: 0;
       left: 0;
       width: 100vw;
       height: 100vh;
       object-fit: cover;
-      transform: scaleX(-1);
     }
-    #webcam {
-      display: none;
+    #webcam, #bg-video {
+      display: none; /* Elementele video brute sunt ascunse */
     }
     #output_canvas {
       z-index: 2;
+      transform: scaleX(-1); /* Oglindire camera */
     }
 
-    /* Panou Control Sus - Stânga */
+    /* Panou Control */
     #ui-overlay {
       position: absolute;
       top: 15px;
@@ -48,19 +48,22 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
-      max-width: 320px;
-      background: rgba(15, 15, 25, 0.85);
+      width: 320px;
+      max-height: 92vh;
+      overflow-y: auto;
+      background: rgba(15, 15, 25, 0.9);
       padding: 15px;
       border-radius: 12px;
-      border: 1px solid rgba(0, 255, 204, 0.2);
-      backdrop-filter: blur(8px);
+      border: 1px solid rgba(0, 255, 204, 0.3);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
     }
 
     .btn-main {
       background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
       color: #000;
       border: none;
-      padding: 10px 16px;
+      padding: 12px 16px;
       font-size: 14px;
       font-weight: bold;
       border-radius: 8px;
@@ -72,16 +75,18 @@
     }
 
     .btn-secondary {
+      flex: 1;
       background: rgba(255, 255, 255, 0.1);
       color: #fff;
       border: 1px solid rgba(255, 255, 255, 0.2);
-      padding: 8px 12px;
+      padding: 8px 10px;
       font-size: 12px;
       border-radius: 6px;
       cursor: pointer;
     }
     .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.25);
+      background: rgba(0, 255, 204, 0.2);
+      border-color: #00ffcc;
     }
 
     .upload-group {
@@ -89,20 +94,20 @@
       flex-direction: column;
       gap: 6px;
       border-top: 1px solid rgba(255, 255, 255, 0.1);
-      padding-top: 8px;
+      padding-top: 10px;
     }
     .upload-group label {
       color: #00ffcc;
       font-size: 11px;
       font-weight: bold;
       text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
     .file-input {
       color: #ccc;
       font-size: 12px;
     }
 
-    /* Scalare / Scale Controls */
     .scale-controls {
       display: flex;
       align-items: center;
@@ -117,6 +122,7 @@
     #status {
       color: #00ffcc;
       font-size: 12px;
+      font-weight: bold;
     }
     #version-tag {
       position: absolute;
@@ -128,102 +134,130 @@
     }
   </style>
 
-  <!-- MediaPipe & Three.js Loaders -->
+  <!-- MediaPipe Holistic & CDNs -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 <body>
 
 <div id="container">
   <div id="ui-overlay">
-    <button id="start-btn" class="btn-main">▶️ Pornire Sistem v1.2</button>
+    <button id="start-btn" class="btn-main">▶️ Pornire Sistem v1.3</button>
     <div id="status">Apasă pe buton pentru inițializare...</div>
 
     <div style="display: flex; gap: 6px;">
-      <button id="toggle-crop-btn" class="btn-secondary">✂️ Toggle AI Crop</button>
+      <button id="toggle-crop-btn" class="btn-secondary">✂️ Crop AI: ON</button>
       <button id="fullscreen-btn" class="btn-secondary">⛶ Fullscreen</button>
     </div>
 
-    <!-- Grupa 1: Upload Fundal Custom -->
+    <!-- Grupa 1: Upload Fundal Foto SAU Video -->
     <div class="upload-group">
-      <label>1. Upload Fundal (Image)</label>
-      <input type="file" id="bg-upload" accept="image/*" class="file-input">
+      <label>1. Fundal Custom (Foto sau Video)</label>
+      <input type="file" id="bg-file-upload" accept="image/*,video/*" class="file-input">
+      <button id="clear-bg-btn" class="btn-secondary" style="margin-top:4px;">Șterge Fundal Custom</button>
     </div>
 
-    <!-- Grupa 2: Upload Overlap PNG (Scalabil Free-Form) -->
+    <!-- Grupa 2: Upload Overlap PNG (Scalabil peste mâini/corp) -->
     <div class="upload-group">
       <label>2. Upload Overlap PNG</label>
       <input type="file" id="png-upload" accept="image/png" class="file-input">
       <div class="scale-controls">
         <span>Scală PNG:</span>
-        <input type="range" id="png-scale" min="0.2" max="3.0" step="0.1" value="1.0">
+        <input type="range" id="png-scale" min="0.2" max="4.0" step="0.1" value="1.0">
       </div>
     </div>
 
-    <!-- Grupa 3: Upload Model 3D (GLB/GLTF) -->
+    <!-- Grupa 3: Upload Model 3D (.GLB/.GLTF) -->
     <div class="upload-group">
       <label>3. Upload Model 3D (.GLB / .GLTF)</label>
       <input type="file" id="glb-upload" accept=".glb,.gltf" class="file-input">
       <div class="scale-controls">
-        <span>Scală Cap/Față:</span>
-        <input type="range" id="head-scale" min="0.5" max="2.5" step="0.1" value="1.0">
+        <span>Scală Cap:</span>
+        <input type="range" id="head-scale" min="0.5" max="3.0" step="0.1" value="1.0">
       </div>
     </div>
   </div>
 
-  <div id="version-tag">Versiunea 1.2</div>
+  <div id="version-tag">Versiunea 1.3</div>
 
   <video id="webcam" autoplay playsinline muted></video>
+  <video id="bg-video" autoplay loop muted playsinline></video>
   <canvas id="output_canvas"></canvas>
 </div>
 
 <script>
   const videoElement = document.getElementById('webcam');
+  const bgVideoElement = document.getElementById('bg-video');
   const canvasElement = document.getElementById('output_canvas');
   const canvasCtx = canvasElement.getContext('2d');
+  
+  // Canvas auxiliar pentru masca AI Crop
+  const maskCanvas = document.createElement('canvas');
+  const maskCtx = maskCanvas.getContext('2d');
+
   const startBtn = document.getElementById('start-btn');
   const toggleCropBtn = document.getElementById('toggle-crop-btn');
   const fullscreenBtn = document.getElementById('fullscreen-btn');
   const statusDiv = document.getElementById('status');
   const container = document.getElementById('container');
 
-  // Input-uri Fișiere
-  const bgUpload = document.getElementById('bg-upload');
+  // Input-uri
+  const bgFileUpload = document.getElementById('bg-file-upload');
+  const clearBgBtn = document.getElementById('clear-bg-btn');
   const pngUpload = document.getElementById('png-upload');
-  const glbUpload = document.getElementById('glb-upload');
   const headScaleInput = document.getElementById('head-scale');
   const pngScaleInput = document.getElementById('png-scale');
 
   let camera = null;
   let enableCrop = true;
 
-  // Imagini & Resurse încărcate
+  // Stare resurse fundal
+  let bgType = 'none'; // 'image', 'video', 'none'
   let customBgImg = null;
   let customPngImg = null;
+
   let headScaleFactor = 1.0;
   let pngScaleFactor = 1.0;
 
   function resizeCanvas() {
     canvasElement.width = window.innerWidth;
     canvasElement.height = window.innerHeight;
+    maskCanvas.width = window.innerWidth;
+    maskCanvas.height = window.innerHeight;
   }
   window.addEventListener('resize', resizeCanvas);
   resizeCanvas();
 
-  // Gestionare Încărcare Fundal Custom
-  bgUpload.addEventListener('change', (e) => {
+  // Încărcare Fundal (Foto sau Video)
+  bgFileUpload.addEventListener('change', (e) => {
     const file = e.target.files[0];
-    if (file) {
+    if (!file) return;
+
+    if (file.type.startsWith('image/')) {
+      bgType = 'image';
+      bgVideoElement.pause();
       const img = new Image();
       img.onload = () => { customBgImg = img; };
       img.src = URL.createObjectURL(file);
+      statusDiv.innerText = "Fundal FOTO încărcat!";
+    } else if (file.type.startsWith('video/')) {
+      bgType = 'video';
+      bgVideoElement.src = URL.createObjectURL(file);
+      bgVideoElement.play();
+      statusDiv.innerText = "Fundal VIDEO încărcat!";
     }
   });
 
-  // Gestionare Încărcare PNG Overlay
+  clearBgBtn.addEventListener('click', () => {
+    bgType = 'none';
+    customBgImg = null;
+    bgVideoElement.pause();
+    bgFileUpload.value = '';
+    statusDiv.innerText = "Fundal restabilit la implicit.";
+  });
+
+  // Încărcare PNG Overlay
   pngUpload.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -233,17 +267,17 @@
     }
   });
 
-  // Scale Listeners
   headScaleInput.addEventListener('input', (e) => { headScaleFactor = parseFloat(e.target.value); });
   pngScaleInput.addEventListener('input', (e) => { pngScaleFactor = parseFloat(e.target.value); });
 
   // Toggle Crop AI
   toggleCropBtn.addEventListener('click', () => {
     enableCrop = !enableCrop;
-    statusDiv.innerText = `Crop AI: ${enableCrop ? 'ACTIV' : 'INACTIV'}`;
+    toggleCropBtn.innerText = `✂️ Crop AI: ${enableCrop ? 'ON' : 'OFF'}`;
+    statusDiv.innerText = `Crop AI este acum ${enableCrop ? 'ACTIV' : 'INACTIV'}`;
   });
 
-  // Fullscreen Toggle
+  // Fullscreen
   fullscreenBtn.addEventListener('click', () => {
     if (!document.fullscreenElement) {
       container.requestFullscreen();
@@ -268,26 +302,43 @@
   });
 
   holistic.onResults((results) => {
-    canvasCtx.save();
-    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-
     const w = canvasElement.width;
     const h = canvasElement.height;
 
-    // 1. RANDARE FUNDAL (Custom Image sau Frame Video)
+    canvasCtx.save();
+    canvasCtx.clearRect(0, 0, w, h);
+
+    // 1. PROCESARE DECUPARE FUNDAL (CROP AI + FUNDAL CUSTOM FOTO/VIDEO)
     if (enableCrop && results.segmentationMask) {
-      if (customBgImg) {
+      // Pregătim masca pe canvas-ul secundar
+      maskCtx.save();
+      maskCtx.clearRect(0, 0, w, h);
+      maskCtx.drawImage(results.segmentationMask, 0, 0, w, h);
+      
+      // Extragere persoană din cadru
+      maskCtx.globalCompositeOperation = 'source-in';
+      maskCtx.drawImage(results.image, 0, 0, w, h);
+      maskCtx.restore();
+
+      // Desenare Fundal dorit în Canvas-ul principal
+      if (bgType === 'image' && customBgImg) {
         canvasCtx.drawImage(customBgImg, 0, 0, w, h);
+      } else if (bgType === 'video' && bgVideoElement.readyState >= 2) {
+        canvasCtx.drawImage(bgVideoElement, 0, 0, w, h);
+      } else {
+        // Fundal implicit întunecat
+        canvasCtx.fillStyle = '#0a0a10';
+        canvasCtx.fillRect(0, 0, w, h);
       }
-      canvasCtx.drawImage(results.segmentationMask, 0, 0, w, h);
-      canvasCtx.globalCompositeOperation = 'source-in';
-      canvasCtx.drawImage(results.image, 0, 0, w, h);
-      canvasCtx.globalCompositeOperation = 'source-over';
+
+      // Suprapunem persoana decupată peste fundal
+      canvasCtx.drawImage(maskCanvas, 0, 0, w, h);
     } else {
+      // Daca Crop AI este OFF, afisam direct cadrul brut din camera
       canvasCtx.drawImage(results.image, 0, 0, w, h);
     }
 
-    // 2. MAPARE BUST, UMERI ȘI CAP SCALABIL
+    // 2. MAPARE BUST, CAP SCALABIL ȘI BRAȚE
     if (results.poseLandmarks) {
       const lm = results.poseLandmarks;
 
@@ -303,7 +354,6 @@
         rightHip:      { x: lm[24].x * w, y: lm[24].y * h }
       };
 
-      // Latime Umeri (Referință pentru scalare proporțională)
       const shoulderWidth = Math.hypot(pts.rightShoulder.x - pts.leftShoulder.x, pts.rightShoulder.y - pts.leftShoulder.y);
 
       // Forma Bustului
@@ -319,8 +369,8 @@
       canvasCtx.lineWidth = 3;
       canvasCtx.stroke();
 
-      // Cap & Față Scalabilă
-      const headRadius = (shoulderWidth * 0.3) * headScaleFactor;
+      // Cap / Față Scalabilă
+      const headRadius = (shoulderWidth * 0.35) * headScaleFactor;
       canvasCtx.beginPath();
       canvasCtx.arc(pts.nose.x, pts.nose.y, headRadius, 0, 2 * Math.PI);
       canvasCtx.strokeStyle = '#00f2fe';
@@ -341,11 +391,11 @@
         canvasCtx.stroke();
       });
 
-      // 3. DESENARE OVERLAP PNG PESTE MÂINI / BUST (Dacă există)
+      // 3. DESENARE OVERLAP PNG PESTE MÂINI / CORP
       if (customPngImg) {
-        const pngW = 150 * pngScaleFactor;
+        const pngW = 180 * pngScaleFactor;
         const pngH = (customPngImg.height / customPngImg.width) * pngW;
-        // Poziționare pe încheietura stângă/dreaptă
+        // Plasat automat pe încheietura mâinii drepte (sau poziție ajustabilă)
         canvasCtx.drawImage(customPngImg, pts.rightWrist.x - pngW / 2, pts.rightWrist.y - pngH / 2, pngW, pngH);
       }
 
@@ -355,16 +405,19 @@
         canvasCtx.arc(p.x, p.y, 8, 0, 2 * Math.PI);
         canvasCtx.fillStyle = '#ffff00';
         canvasCtx.fill();
+        canvasCtx.strokeStyle = '#000';
         canvasCtx.stroke();
       });
     }
 
-    // 4. MÂINI (LEFT & RIGHT)
+    // 4. MAPARE MÂINI (LEFT & RIGHT)
     if (results.leftHandLandmarks) {
       drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS, { color: '#00ffff', lineWidth: 2 });
+      drawLandmarks(canvasCtx, results.leftHandLandmarks, { color: '#ff00ff', radius: 3 });
     }
     if (results.rightHandLandmarks) {
       drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS, { color: '#00ffff', lineWidth: 2 });
+      drawLandmarks(canvasCtx, results.rightHandLandmarks, { color: '#ff00ff', radius: 3 });
     }
 
     canvasCtx.restore();
@@ -372,7 +425,7 @@
 
   // Pornire Aplicație
   startBtn.addEventListener('click', async () => {
-    statusDiv.innerText = "Inițializare cameră și modele...";
+    statusDiv.innerText = "Se inițializează camera...";
     startBtn.style.display = 'none';
 
     if (!camera) {
@@ -384,6 +437,7 @@
         height: 720
       });
       await camera.start();
+      statusDiv.innerText = "v1.3 Activ • Crop AI & Tracking Funcționale!";
     }
   });
 </script>
