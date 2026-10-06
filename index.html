@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- Versiunea 1.1: Mapare Cap, Bust, Mâini și Crop Fundal AI -->
-  <title>Mapare Full Upper Body - v1.1</title>
+  <!-- Versiunea 1.2: Multi-Layer Upload, Scalare Cap/Față, Control Crop AI & Fullscreen -->
+  <title>Tracking & Multi-Layer System - v1.2</title>
   <style>
     * {
       box-sizing: border-box;
@@ -15,7 +15,7 @@
       width: 100vw;
       height: 100vh;
       overflow: hidden;
-      background-color: #0d0d11;
+      background-color: #08080c;
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
     #container {
@@ -30,70 +30,151 @@
       width: 100vw;
       height: 100vh;
       object-fit: cover;
-      transform: scaleX(-1); /* Oglindire orizontală */
+      transform: scaleX(-1);
     }
     #webcam {
-      display: none; /* Ascundem fluxul video brut */
+      display: none;
     }
     #output_canvas {
       z-index: 2;
     }
+
+    /* Panou Control Sus - Stânga */
     #ui-overlay {
       position: absolute;
-      top: 20px;
-      left: 20px;
+      top: 15px;
+      left: 15px;
       z-index: 10;
       display: flex;
       flex-direction: column;
       gap: 10px;
+      max-width: 320px;
+      background: rgba(15, 15, 25, 0.85);
+      padding: 15px;
+      border-radius: 12px;
+      border: 1px solid rgba(0, 255, 204, 0.2);
+      backdrop-filter: blur(8px);
     }
-    .btn-action {
+
+    .btn-main {
       background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
       color: #000;
       border: none;
-      padding: 14px 24px;
-      font-size: 15px;
+      padding: 10px 16px;
+      font-size: 14px;
       font-weight: bold;
-      border-radius: 25px;
+      border-radius: 8px;
       cursor: pointer;
-      box-shadow: 0 4px 15px rgba(0, 242, 254, 0.4);
-      transition: all 0.2s ease;
+      transition: all 0.2s;
     }
-    .btn-action:hover {
-      transform: scale(1.03);
+    .btn-main:hover {
+      transform: scale(1.02);
     }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 8px 12px;
+      font-size: 12px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    .upload-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      padding-top: 8px;
+    }
+    .upload-group label {
+      color: #00ffcc;
+      font-size: 11px;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+    .file-input {
+      color: #ccc;
+      font-size: 12px;
+    }
+
+    /* Scalare / Scale Controls */
+    .scale-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #fff;
+      font-size: 12px;
+    }
+    .scale-controls input[type="range"] {
+      flex: 1;
+    }
+
     #status {
       color: #00ffcc;
-      background: rgba(0, 0, 0, 0.85);
-      padding: 8px 14px;
-      border-radius: 8px;
-      font-size: 13px;
-      border: 1px solid rgba(0, 255, 204, 0.2);
+      font-size: 12px;
     }
     #version-tag {
       position: absolute;
-      bottom: 20px;
-      right: 20px;
-      color: rgba(255, 255, 255, 0.5);
+      bottom: 15px;
+      right: 15px;
+      color: rgba(255, 255, 255, 0.4);
       font-size: 12px;
       z-index: 10;
     }
   </style>
 
-  <!-- Librării MediaPipe Holistic -->
+  <!-- MediaPipe & Three.js Loaders -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 <body>
 
 <div id="container">
   <div id="ui-overlay">
-    <button id="start-btn" class="btn-action">▶️ Pornește Tracking Full Upper Body</button>
+    <button id="start-btn" class="btn-main">▶️ Pornire Sistem v1.2</button>
     <div id="status">Apasă pe buton pentru inițializare...</div>
+
+    <div style="display: flex; gap: 6px;">
+      <button id="toggle-crop-btn" class="btn-secondary">✂️ Toggle AI Crop</button>
+      <button id="fullscreen-btn" class="btn-secondary">⛶ Fullscreen</button>
+    </div>
+
+    <!-- Grupa 1: Upload Fundal Custom -->
+    <div class="upload-group">
+      <label>1. Upload Fundal (Image)</label>
+      <input type="file" id="bg-upload" accept="image/*" class="file-input">
+    </div>
+
+    <!-- Grupa 2: Upload Overlap PNG (Scalabil Free-Form) -->
+    <div class="upload-group">
+      <label>2. Upload Overlap PNG</label>
+      <input type="file" id="png-upload" accept="image/png" class="file-input">
+      <div class="scale-controls">
+        <span>Scală PNG:</span>
+        <input type="range" id="png-scale" min="0.2" max="3.0" step="0.1" value="1.0">
+      </div>
+    </div>
+
+    <!-- Grupa 3: Upload Model 3D (GLB/GLTF) -->
+    <div class="upload-group">
+      <label>3. Upload Model 3D (.GLB / .GLTF)</label>
+      <input type="file" id="glb-upload" accept=".glb,.gltf" class="file-input">
+      <div class="scale-controls">
+        <span>Scală Cap/Față:</span>
+        <input type="range" id="head-scale" min="0.5" max="2.5" step="0.1" value="1.0">
+      </div>
+    </div>
   </div>
 
-  <div id="version-tag">Versiunea 1.1</div>
+  <div id="version-tag">Versiunea 1.2</div>
 
   <video id="webcam" autoplay playsinline muted></video>
   <canvas id="output_canvas"></canvas>
@@ -104,10 +185,26 @@
   const canvasElement = document.getElementById('output_canvas');
   const canvasCtx = canvasElement.getContext('2d');
   const startBtn = document.getElementById('start-btn');
+  const toggleCropBtn = document.getElementById('toggle-crop-btn');
+  const fullscreenBtn = document.getElementById('fullscreen-btn');
   const statusDiv = document.getElementById('status');
   const container = document.getElementById('container');
 
+  // Input-uri Fișiere
+  const bgUpload = document.getElementById('bg-upload');
+  const pngUpload = document.getElementById('png-upload');
+  const glbUpload = document.getElementById('glb-upload');
+  const headScaleInput = document.getElementById('head-scale');
+  const pngScaleInput = document.getElementById('png-scale');
+
   let camera = null;
+  let enableCrop = true;
+
+  // Imagini & Resurse încărcate
+  let customBgImg = null;
+  let customPngImg = null;
+  let headScaleFactor = 1.0;
+  let pngScaleFactor = 1.0;
 
   function resizeCanvas() {
     canvasElement.width = window.innerWidth;
@@ -116,6 +213,46 @@
   window.addEventListener('resize', resizeCanvas);
   resizeCanvas();
 
+  // Gestionare Încărcare Fundal Custom
+  bgUpload.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const img = new Image();
+      img.onload = () => { customBgImg = img; };
+      img.src = URL.createObjectURL(file);
+    }
+  });
+
+  // Gestionare Încărcare PNG Overlay
+  pngUpload.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const img = new Image();
+      img.onload = () => { customPngImg = img; };
+      img.src = URL.createObjectURL(file);
+    }
+  });
+
+  // Scale Listeners
+  headScaleInput.addEventListener('input', (e) => { headScaleFactor = parseFloat(e.target.value); });
+  pngScaleInput.addEventListener('input', (e) => { pngScaleFactor = parseFloat(e.target.value); });
+
+  // Toggle Crop AI
+  toggleCropBtn.addEventListener('click', () => {
+    enableCrop = !enableCrop;
+    statusDiv.innerText = `Crop AI: ${enableCrop ? 'ACTIV' : 'INACTIV'}`;
+  });
+
+  // Fullscreen Toggle
+  fullscreenBtn.addEventListener('click', () => {
+    if (!document.fullscreenElement) {
+      container.requestFullscreen();
+    } else {
+      document.exitFullscreen();
+    }
+  });
+
+  // Configurare MediaPipe Holistic
   const holistic = new Holistic({
     locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`
   });
@@ -123,7 +260,7 @@
   holistic.setOptions({
     modelComplexity: 1,
     smoothLandmarks: true,
-    enableSegmentation: true, // Crop / Decupare fundal AI
+    enableSegmentation: true,
     smoothSegmentation: true,
     refineFaceLandmarks: true,
     minDetectionConfidence: 0.5,
@@ -131,16 +268,17 @@
   });
 
   holistic.onResults((results) => {
-    statusDiv.innerText = "v1.1 Activ: Cap + Bust + Brațe + Mâini + Decupare AI";
-
     canvasCtx.save();
     canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
     const w = canvasElement.width;
     const h = canvasElement.height;
 
-    // 1. DECUPARE FUNDAL (CROP AI)
-    if (results.segmentationMask) {
+    // 1. RANDARE FUNDAL (Custom Image sau Frame Video)
+    if (enableCrop && results.segmentationMask) {
+      if (customBgImg) {
+        canvasCtx.drawImage(customBgImg, 0, 0, w, h);
+      }
       canvasCtx.drawImage(results.segmentationMask, 0, 0, w, h);
       canvasCtx.globalCompositeOperation = 'source-in';
       canvasCtx.drawImage(results.image, 0, 0, w, h);
@@ -149,63 +287,53 @@
       canvasCtx.drawImage(results.image, 0, 0, w, h);
     }
 
-    // 2. SHAPE BUST + CAP + BRAȚE
+    // 2. MAPARE BUST, UMERI ȘI CAP SCALABIL
     if (results.poseLandmarks) {
       const lm = results.poseLandmarks;
 
       const pts = {
         nose:          { x: lm[0].x * w,  y: lm[0].y * h },
-        leftEar:       { x: lm[7].x * w,  y: lm[7].y * h },
-        rightEar:      { x: lm[8].x * w,  y: lm[8].y * h },
         leftShoulder:  { x: lm[11].x * w, y: lm[11].y * h },
         rightShoulder: { x: lm[12].x * w, y: lm[12].y * h },
         leftElbow:     { x: lm[13].x * w, y: lm[13].y * h },
         rightElbow:    { x: lm[14].x * w, y: lm[14].y * h },
+        leftWrist:     { x: lm[15].x * w, y: lm[15].y * h },
+        rightWrist:    { x: lm[16].x * w, y: lm[16].y * h },
         leftHip:       { x: lm[23].x * w, y: lm[23].y * h },
         rightHip:      { x: lm[24].x * w, y: lm[24].y * h }
       };
 
-      // Punct de mijloc între umeri (Baza gâtului)
-      const neckBase = {
-        x: (pts.leftShoulder.x + pts.rightShoulder.x) / 2,
-        y: (pts.leftShoulder.y + pts.rightShoulder.y) / 2
-      };
+      // Latime Umeri (Referință pentru scalare proporțională)
+      const shoulderWidth = Math.hypot(pts.rightShoulder.x - pts.leftShoulder.x, pts.rightShoulder.y - pts.leftShoulder.y);
 
-      // Forma Bustului (Poligon verde)
+      // Forma Bustului
       canvasCtx.beginPath();
       canvasCtx.moveTo(pts.leftShoulder.x, pts.leftShoulder.y);
       canvasCtx.lineTo(pts.rightShoulder.x, pts.rightShoulder.y);
       canvasCtx.lineTo(pts.rightHip.x, pts.rightHip.y);
       canvasCtx.lineTo(pts.leftHip.x, pts.leftHip.y);
       canvasCtx.closePath();
-      canvasCtx.fillStyle = 'rgba(0, 255, 204, 0.25)';
+      canvasCtx.fillStyle = 'rgba(0, 255, 204, 0.2)';
       canvasCtx.fill();
       canvasCtx.strokeStyle = '#00ffcc';
       canvasCtx.lineWidth = 3;
       canvasCtx.stroke();
 
-      // Linia Gât / Cap (Conectează nasul la baza gâtului)
+      // Cap & Față Scalabilă
+      const headRadius = (shoulderWidth * 0.3) * headScaleFactor;
       canvasCtx.beginPath();
-      canvasCtx.moveTo(neckBase.x, neckBase.y);
-      canvasCtx.lineTo(pts.nose.x, pts.nose.y);
-      canvasCtx.strokeStyle = '#ffff00';
-      canvasCtx.lineWidth = 4;
+      canvasCtx.arc(pts.nose.x, pts.nose.y, headRadius, 0, 2 * Math.PI);
+      canvasCtx.strokeStyle = '#00f2fe';
+      canvasCtx.lineWidth = 3;
       canvasCtx.stroke();
 
-      // Forma Capului (Contur cap/urechi)
-      canvasCtx.beginPath();
-      canvasCtx.arc(pts.nose.x, pts.nose.y, Math.abs(pts.leftShoulder.x - pts.rightShoulder.x) * 0.25, 0, 2 * Math.PI);
-      canvasCtx.strokeStyle = 'rgba(0, 242, 254, 0.8)';
-      canvasCtx.lineWidth = 2;
-      canvasCtx.stroke();
-
-      // Conexiuni Brațe
+      // Brațe
       const arms = [
-        [pts.leftShoulder, pts.leftElbow],
-        [pts.rightShoulder, pts.rightElbow]
+        [pts.leftShoulder, pts.leftElbow], [pts.leftElbow, pts.leftWrist],
+        [pts.rightShoulder, pts.rightElbow], [pts.rightElbow, pts.rightWrist]
       ];
       canvasCtx.strokeStyle = '#ff0055';
-      canvasCtx.lineWidth = 5;
+      canvasCtx.lineWidth = 4;
       arms.forEach(([p1, p2]) => {
         canvasCtx.beginPath();
         canvasCtx.moveTo(p1.x, p1.y);
@@ -213,37 +341,38 @@
         canvasCtx.stroke();
       });
 
-      // Desenare Puncte Articulații Mari
-      [pts.nose, pts.leftShoulder, pts.rightShoulder, pts.leftElbow, pts.rightElbow, pts.leftHip, pts.rightHip].forEach((p) => {
+      // 3. DESENARE OVERLAP PNG PESTE MÂINI / BUST (Dacă există)
+      if (customPngImg) {
+        const pngW = 150 * pngScaleFactor;
+        const pngH = (customPngImg.height / customPngImg.width) * pngW;
+        // Poziționare pe încheietura stângă/dreaptă
+        canvasCtx.drawImage(customPngImg, pts.rightWrist.x - pngW / 2, pts.rightWrist.y - pngH / 2, pngW, pngH);
+      }
+
+      // Puncte Articulații
+      Object.values(pts).forEach((p) => {
         canvasCtx.beginPath();
-        canvasCtx.arc(p.x, p.y, 10, 0, 2 * Math.PI);
+        canvasCtx.arc(p.x, p.y, 8, 0, 2 * Math.PI);
         canvasCtx.fillStyle = '#ffff00';
         canvasCtx.fill();
-        canvasCtx.lineWidth = 2;
-        canvasCtx.strokeStyle = '#000';
         canvasCtx.stroke();
       });
     }
 
-    // 3. MÂINI (LEFT & RIGHT HAND TRACKING)
+    // 4. MÂINI (LEFT & RIGHT)
     if (results.leftHandLandmarks) {
       drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS, { color: '#00ffff', lineWidth: 2 });
-      drawLandmarks(canvasCtx, results.leftHandLandmarks, { color: '#ff00ff', radius: 3 });
     }
     if (results.rightHandLandmarks) {
       drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS, { color: '#00ffff', lineWidth: 2 });
-      drawLandmarks(canvasCtx, results.rightHandLandmarks, { color: '#ff00ff', radius: 3 });
     }
 
     canvasCtx.restore();
   });
 
+  // Pornire Aplicație
   startBtn.addEventListener('click', async () => {
-    if (container.requestFullscreen) {
-      container.requestFullscreen();
-    }
-
-    statusDiv.innerText = "Pornire modul AI & Camera...";
+    statusDiv.innerText = "Inițializare cameră și modele...";
     startBtn.style.display = 'none';
 
     if (!camera) {
