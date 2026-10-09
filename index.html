@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>VTuber Studio v2.5 - Correct Layering & Torso Mapping</title>
+  <title>3D Studio Mapper - Complete VTuber Edition</title>
 
   <!-- MediaPipe CDNs -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -21,110 +21,184 @@
 
     #app-container { width: 100vw; height: 100vh; position: relative; }
     canvas { display: block; width: 100vw; height: 100vh; background: #000; cursor: crosshair; }
-    #webcam, #vid { display: none; }
+    #webcam, #torsoVid, #bgVid { display: none; }
 
-    #top-bar {
-      position: absolute; top: 15px; left: 15px; z-index: 20;
-      background: rgba(10, 10, 20, 0.9); padding: 10px 14px;
-      border-radius: 10px; border: 1px solid rgba(0, 255, 204, 0.4);
-      backdrop-filter: blur(10px); display: flex; align-items: center; gap: 8px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.5); flex-wrap: wrap; max-width: 95vw;
+    /* Panou Control Stânga (Exact ca în poză) */
+    #control-panel {
+      position: absolute; top: 15px; left: 15px; z-index: 30;
+      background: rgba(10, 10, 20, 0.92); padding: 14px;
+      border-radius: 12px; border: 1px solid rgba(0, 255, 204, 0.4);
+      backdrop-filter: blur(12px); display: flex; flex-direction: column; gap: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.7); width: 320px; max-height: 90vh; overflow-y: auto;
+      transition: transform 0.3s ease, opacity 0.3s ease;
     }
+    #control-panel.hidden { transform: translateX(-110%); opacity: 0; pointer-events: none; }
 
-    #top-bar label { font-size: 11px; font-weight: bold; color: #00ffcc; text-transform: uppercase; }
+    .panel-section { display: flex; flex-direction: column; gap: 6px; font-size: 11px; }
+    .panel-title { font-size: 10px; font-weight: bold; color: #00ffcc; text-transform: uppercase; margin-bottom: 2px; }
+    
+    .row-group { display: flex; align-items: center; justify-content: space-between; gap: 6px; background: rgba(255,255,255,0.03); padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08); }
+    .row-group label { font-weight: bold; color: #ddd; flex: 1; }
+
+    .btn-toggle {
+      background: rgba(255, 51, 102, 0.2); color: #ff3366; border: 1px solid #ff3366;
+      padding: 3px 8px; font-size: 10px; border-radius: 4px; cursor: pointer; font-weight: bold;
+    }
+    .btn-toggle.active { background: rgba(0, 255, 204, 0.2); color: #00ffcc; border-color: #00ffcc; }
+
+    .file-btn {
+      background: rgba(255, 255, 255, 0.1); color: #fff; border: 1px solid rgba(255,255,255,0.2);
+      padding: 3px 6px; font-size: 10px; border-radius: 4px; cursor: pointer; text-align: center;
+    }
+    .file-btn:hover { background: rgba(0, 255, 204, 0.2); border-color: #00ffcc; color: #00ffcc; }
     .file-input { display: none; }
+    .file-name { font-size: 9px; color: #aaa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 90px; }
 
-    .btn-action {
-      background: rgba(255, 255, 255, 0.1); color: #fff;
-      border: 1px solid rgba(255, 255, 255, 0.2); padding: 5px 9px;
-      font-size: 11px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: all 0.2s;
-    }
-    .btn-action:hover { background: rgba(0, 255, 204, 0.2); border-color: #00ffcc; color: #00ffcc; }
-    .btn-active { background: #00ffcc !important; color: #000 !important; }
-    .btn-reset { border-color: #ff3366; color: #ff3366; }
-    .btn-reset:hover { background: rgba(255, 51, 102, 0.2); }
+    .slider-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 10px; }
+    .slider-row input { flex: 1; accent-color: #00ffcc; }
 
-    #mask-panel {
-      position: absolute; bottom: 15px; left: 15px; z-index: 20;
-      background: rgba(10, 10, 20, 0.9); padding: 12px; border-radius: 10px;
-      border: 1px solid rgba(0, 255, 204, 0.4); backdrop-filter: blur(10px);
-      display: flex; flex-direction: column; gap: 6px; font-size: 11px; width: 260px;
+    /* Buton Hide Controls (Dreapta Sus) */
+    #hideControlsBtn {
+      position: absolute; top: 15px; right: 15px; z-index: 30;
+      background: rgba(0, 255, 204, 0.2); color: #00ffcc; border: 1px solid #00ffcc;
+      padding: 8px 14px; font-size: 11px; border-radius: 8px; cursor: pointer; font-weight: bold;
+      backdrop-filter: blur(10px); box-shadow: 0 4px 15px rgba(0,0,0,0.5);
     }
-    .slider-row { display: flex; justify-content: space-between; align-items: center; }
-    .slider-row input { width: 120px; }
+    #hideControlsBtn:hover { background: rgba(0, 255, 204, 0.4); }
+
+    /* Cercul de Previzualizare Cap (Sus Dreapta) */
+    #headPreviewCircle {
+      position: absolute; top: 70px; right: 30px; width: 180px; height: 180px;
+      border: 2px solid rgba(0, 255, 204, 0.5); border-radius: 50%; z-index: 10;
+      display: flex; align-items: center; justify-content: center; pointer-events: none;
+      background: rgba(0,0,0,0.2); backdrop-filter: blur(2px);
+    }
 
     #status {
-      position: absolute; top: 15px; right: 15px; z-index: 20;
-      background: rgba(10, 10, 20, 0.85); padding: 6px 12px; border-radius: 6px;
-      font-size: 11px; color: #00ffcc; border: 1px solid rgba(0,255,204,0.3); backdrop-filter: blur(8px);
+      position: absolute; bottom: 15px; left: 15px; z-index: 10;
+      background: rgba(10, 10, 20, 0.8); padding: 5px 10px; border-radius: 6px;
+      font-size: 10px; color: #00ffcc; border: 1px solid rgba(0,255,204,0.3);
     }
   </style>
 </head>
 <body>
 
 <div id="app-container">
-  <div id="top-bar">
-    <label class="btn-action btn-active">
-      🎬 Video/Foto Torso (8 Puncte)
-      <input type="file" id="mediaInput" accept="video/*,image/*" class="file-input">
-    </label>
+  <!-- Buton Hide Controls -->
+  <button id="hideControlsBtn">👁 Hide Controls</button>
 
-    <label class="btn-action">
-      🎭 Încarcă Mască PNG
-      <input type="file" id="avatarUploader" accept="image/*" class="file-input">
-    </label>
-    
-    <button id="toggle-grid" class="btn-action btn-active">Grilă: ON</button>
-    <button id="toggle-cam" class="btn-action btn-active">Cameră: ON</button>
-    <button id="toggle-pose" class="btn-action btn-active">Brațe / Torso (Pose): ON</button>
-    <button id="toggle-ai-cut" class="btn-action">AI Cut Corp: OFF</button>
-    <button id="reset-btn" class="btn-action btn-reset">Resetare</button>
+  <!-- Panou Stânga -->
+  <div id="control-panel">
+    <div style="font-size: 11px; font-weight: bold; color: #00ffcc;" id="headFileInfo">Imagine încărcată pentru head!</div>
+
+    <!-- COMUTATOARE GENERALE -->
+    <div class="panel-section">
+      <div class="panel-title">Comutatoare Generale</div>
+      <div style="display: flex; gap: 6px;">
+        <button id="toggleGrid" class="btn-toggle active">Linii Grid: ON</button>
+        <button id="toggleAiCut" class="btn-toggle">Crop AI: ON</button>
+        <button id="toggleCam" class="btn-toggle active">Camera: SHOW</button>
+      </div>
+      <button id="resetGrid" class="file-btn" style="border-color: #ff3366; color: #ff3366; margin-top: 4px;">Reset Formă Puncte</button>
+    </div>
+
+    <!-- ÎNCĂRCARE MĂȘTI & SEGMENTE -->
+    <div class="panel-section">
+      <div class="panel-title">Încărcare Măști & Segmente (Foto / Video)</div>
+      
+      <div class="row-group">
+        <label>Cap: <span id="capStatus" style="color:#ff3366">OFF</span></label>
+        <label class="file-btn">Choose File <input type="file" id="capInput" accept="image/*" class="file-input"></label>
+        <span class="file-name" id="capFileName">No file chosen</span>
+      </div>
+
+      <div class="row-group">
+        <label>Torso: <span id="torsoStatus" style="color:#ff3366">OFF</span></label>
+        <label class="file-btn">Choose File <input type="file" id="torsoInput" accept="video/*,image/*" class="file-input"></label>
+        <span class="file-name" id="torsoFileName">No file chosen</span>
+      </div>
+
+      <div class="row-group">
+        <label>Braț L: <span id="armLStatus" style="color:#ff3366">OFF</span></label>
+        <label class="file-btn">Choose File <input type="file" id="armLInput" accept="image/*" class="file-input"></label>
+        <span class="file-name" id="armLFileName">No file chosen</span>
+      </div>
+
+      <div class="row-group">
+        <label>Braț R: <span id="armRStatus" style="color:#ff3366">OFF</span></label>
+        <label class="file-btn">Choose File <input type="file" id="armRInput" accept="image/*" class="file-input"></label>
+        <span class="file-name" id="armRFileName">No file chosen</span>
+      </div>
+    </div>
+
+    <!-- MODEL 3D SEPARABIL -->
+    <div class="panel-section">
+      <div class="panel-title">Model 3D Separabil (GLB / GLTF)</div>
+      <div class="row-group">
+        <button id="toggle3D" class="btn-toggle">Model 3D: OFF</button>
+        <label class="file-btn">Choose File <input type="file" id="model3dInput" accept=".glb,.gltf" class="file-input"></label>
+        <span class="file-name" id="model3dFileName">No file chosen</span>
+      </div>
+      <div class="slider-row"><label>Scală 3D:</label><input type="range" id="scale3d" min="0.1" max="3" step="0.1" value="1"></div>
+      <div class="slider-row"><label>Offset X 3D:</label><input type="range" id="offsetX3d" min="-200" max="200" step="1" value="0"></div>
+      <div class="slider-row"><label>Offset Y 3D:</label><input type="range" id="offsetY3d" min="-200" max="200" step="1" value="0"></div>
+    </div>
+
+    <!-- CALIBRARE MANUALĂ CAP & BRAȚE -->
+    <div class="panel-section">
+      <div class="panel-title">Calibrare Manuală Cap & Brațe</div>
+      <div class="slider-row"><label>Scală Cap:</label><input type="range" id="scaleCap" min="0.1" max="3" step="0.05" value="1"></div>
+      <div class="slider-row"><label>Grosime Brațe:</label><input type="range" id="thicknessArms" min="1" max="20" step="1" value="4"></div>
+    </div>
+
+    <!-- FUNDAL CUSTOM -->
+    <div class="panel-section">
+      <div class="panel-title">Fundal Custom (Foto / Video)</div>
+      <div class="row-group">
+        <button id="toggleBg" class="btn-toggle">Fundal: OFF</button>
+        <label class="file-btn">Choose File <input type="file" id="bgInput" accept="image/*,video/*" class="file-input"></label>
+        <span class="file-name" id="bgFileName">No file chosen</span>
+      </div>
+    </div>
   </div>
 
-  <div id="mask-panel">
-    <strong style="color:#00ffcc;">Setări Mască Cap (PNG)</strong>
-    <div class="slider-row"><label>Dimensiune:</label><input type="range" id="scaleSlider" min="0.2" max="3" step="0.05" value="1"></div>
-    <div class="slider-row"><label>Rotație:</label><input type="range" id="rotationSlider" min="-180" max="180" step="1" value="0"></div>
-    <div class="slider-row"><label>Offset X:</label><input type="range" id="offsetXSlider" min="-300" max="300" step="1" value="0"></div>
-    <div class="slider-row"><label>Offset Y:</label><input type="range" id="offsetYSlider" min="-300" max="300" step="1" value="0"></div>
-  </div>
+  <!-- Cercul Head Preview -->
+  <div id="headPreviewCircle"></div>
 
-  <div id="status">Pornire module Tracking...</div>
+  <div id="status">Sistem pregătit...</div>
   <canvas id="canvas"></canvas>
 </div>
 
+<!-- Elemente Media ascunse -->
 <video id="webcam" playsinline muted></video>
-<video id="vid" loop muted playsinline crossorigin="anonymous"></video>
+<video id="torsoVid" loop muted playsinline crossorigin="anonymous"></video>
+<video id="bgVid" loop muted playsinline crossorigin="anonymous"></video>
 
 <script>
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
-  const videoElem = document.getElementById('vid');
   const webcamElem = document.getElementById('webcam');
-  const imageElem = new Image();
-  const avatarImg = new Image();
+  const torsoVidElem = document.getElementById('torsoVid');
+  const bgVidElem = document.getElementById('bgVid');
 
-  const mediaInput = document.getElementById('mediaInput');
-  const avatarUploader = document.getElementById('avatarUploader');
-  const resetBtn = document.getElementById('reset-btn');
+  const capImg = new Image();
+  const armLImg = new Image();
+  const armRImg = new Image();
+  const bgImg = new Image();
 
-  const toggleGridBtn = document.getElementById('toggle-grid');
-  const toggleCamBtn = document.getElementById('toggle-cam');
-  const togglePoseBtn = document.getElementById('toggle-pose');
-  const toggleAiCutBtn = document.getElementById('toggle-ai-cut');
-  const statusEl = document.getElementById('status');
-
-  const scaleSlider = document.getElementById('scaleSlider');
-  const rotationSlider = document.getElementById('rotationSlider');
-  const offsetXSlider = document.getElementById('offsetXSlider');
-  const offsetYSlider = document.getElementById('offsetYSlider');
-
+  // Stări comutatoare & elemente
   let showGrid = true;
-  let showCamera = true;
-  let showPose = true;
   let isAiCutOn = false;
-  let currentMedia = null;
-  let hasAvatar = false;
+  let showCamera = true;
+  let useCap = false;
+  let useTorso = false;
+  let useArmL = false;
+  let useArmR = false;
+  let use3D = false;
+  let useBg = false;
+
+  let currentTorsoMedia = null;
+  let currentBgMedia = null;
 
   function resizeCanvas() {
     canvas.width = window.innerWidth;
@@ -133,177 +207,143 @@
   window.addEventListener('resize', resizeCanvas);
   resizeCanvas();
 
-  /* 8 Puncte Mapping (Torso) */
+  // UI Interacțiuni Panou
+  const controlPanel = document.getElementById('control-panel');
+  const hideControlsBtn = document.getElementById('hideControlsBtn');
+  hideControlsBtn.addEventListener('click', () => {
+    controlPanel.classList.toggle('hidden');
+    hideControlsBtn.innerText = controlPanel.classList.contains('hidden') ? '👁 Show Controls' : '👁 Hide Controls';
+  });
+
+  document.getElementById('toggleGrid').addEventListener('click', (e) => {
+    showGrid = !showGrid;
+    e.target.innerText = `Linii Grid: ${showGrid ? 'ON' : 'OFF'}`;
+    e.target.classList.toggle('active', showGrid);
+  });
+
+  document.getElementById('toggleAiCut').addEventListener('click', (e) => {
+    isAiCutOn = !isAiCutOn;
+    e.target.innerText = `Crop AI: ${isAiCutOn ? 'ON' : 'OFF'}`;
+    e.target.classList.toggle('active', isAiCutOn);
+  });
+
+  document.getElementById('toggleCam').addEventListener('click', (e) => {
+    showCamera = !showCamera;
+    e.target.innerText = `Camera: ${showCamera ? 'SHOW' : 'HIDE'}`;
+    e.target.classList.toggle('active', showCamera);
+  });
+
+  // Gestionare Fișiere & Status Butoane
+  function setupFileHandler(inputId, statusId, nameId, callback, typeToggleBtn) {
+    const input = document.getElementById(inputId);
+    const status = document.getElementById(statusId);
+    const nameSpan = document.getElementById(nameId);
+
+    input.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      nameSpan.innerText = file.name;
+      const url = URL.createObjectURL(file);
+      callback(url, file.type);
+      status.innerText = 'ON';
+      status.style.color = '#00ffcc';
+    });
+  }
+
+  setupFileHandler('capInput', 'capStatus', 'capFileName', (url) => { capImg.src = url; useCap = true; });
+  setupFileHandler('torsoInput', 'torsoStatus', 'torsoFileName', (url, type) => {
+    if (type.startsWith('video')) {
+      torsoVidElem.src = url; torsoVidElem.play();
+      currentTorsoMedia = torsoVidElem;
+    } else {
+      const img = new Image(); img.onload = () => { currentTorsoMedia = img; }; img.src = url;
+    }
+    useTorso = true;
+  });
+  setupFileHandler('armLInput', 'armLStatus', 'armLFileName', (url) => { armLImg.src = url; useArmL = true; });
+  setupFileHandler('armRInput', 'armRStatus', 'armRFileName', (url) => { armRImg.src = url; useArmR = true; });
+  setupFileHandler('bgInput', 'bgStatus', 'bgFileName', (url, type) => {
+    if (type.startsWith('video')) {
+      bgVidElem.src = url; bgVidElem.play();
+      currentBgMedia = bgVidElem;
+    } else {
+      bgImg.onload = () => { currentBgMedia = bgImg; }; bgImg.src = url;
+    }
+    useBg = true;
+  });
+
+  // MAPPING 8 PUNCTE PENTRU TORSO / CADRU 3D
   function getDefaultPoints() {
     const w = canvas.width;
     const h = canvas.height;
     return [
-      { x: w * 0.25, y: h * 0.15 },
-      { x: w * 0.50, y: h * 0.15 },
-      { x: w * 0.75, y: h * 0.15 },
-      { x: w * 0.25, y: h * 0.50 },
-      { x: w * 0.75, y: h * 0.50 },
-      { x: w * 0.25, y: h * 0.85 },
-      { x: w * 0.50, y: h * 0.85 },
-      { x: w * 0.75, y: h * 0.85 }
+      { x: w * 0.35, y: h * 0.40 },
+      { x: w * 0.50, y: h * 0.38 },
+      { x: w * 0.65, y: h * 0.40 },
+      { x: w * 0.35, y: h * 0.65 },
+      { x: w * 0.65, y: h * 0.65 },
+      { x: w * 0.32, y: h * 0.90 },
+      { x: w * 0.50, y: h * 0.92 },
+      { x: w * 0.68, y: h * 0.90 }
     ];
   }
 
-  let pts = JSON.parse(localStorage.getItem('v40_mapper_8pts_config')) || getDefaultPoints();
+  let pts = JSON.parse(localStorage.getItem('v40_torso_8pts')) || getDefaultPoints();
+  function saveConfig() { localStorage.setItem('v40_torso_8pts', JSON.stringify(pts)); }
 
-  function saveConfig() {
-    localStorage.setItem('v40_mapper_8pts_config', JSON.stringify(pts));
-  }
-
-  resetBtn.addEventListener('click', () => {
+  document.getElementById('resetGrid').addEventListener('click', () => {
     pts = getDefaultPoints();
     saveConfig();
   });
 
-  toggleGridBtn.addEventListener('click', () => {
-    showGrid = !showGrid;
-    toggleGridBtn.innerText = `Grilă: ${showGrid ? 'ON' : 'OFF'}`;
-    toggleGridBtn.classList.toggle('btn-active', showGrid);
-  });
-
-  toggleCamBtn.addEventListener('click', () => {
-    showCamera = !showCamera;
-    toggleCamBtn.innerText = `Cameră: ${showCamera ? 'ON' : 'OFF'}`;
-    toggleCamBtn.classList.toggle('btn-active', showCamera);
-  });
-
-  togglePoseBtn.addEventListener('click', () => {
-    showPose = !showPose;
-    togglePoseBtn.innerText = `Brațe / Torso (Pose): ${showPose ? 'ON' : 'OFF'}`;
-    togglePoseBtn.classList.toggle('btn-active', showPose);
-  });
-
-  toggleAiCutBtn.addEventListener('click', () => {
-    isAiCutOn = !isAiCutOn;
-    toggleAiCutBtn.innerText = `AI Cut Corp: ${isAiCutOn ? 'ON' : 'OFF'}`;
-    toggleAiCutBtn.classList.toggle('btn-active', isAiCutOn);
-  });
-
-  mediaInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    if (file.type.startsWith('video/')) {
-      videoElem.src = url;
-      videoElem.loop = true;
-      videoElem.muted = true;
-      videoElem.playsInline = true;
-      videoElem.onloadeddata = () => {
-        currentMedia = videoElem;
-        videoElem.play().catch(err => console.log(err));
-      };
-    } else if (file.type.startsWith('image/')) {
-      imageElem.onload = () => { currentMedia = imageElem; };
-      imageElem.src = url;
-    }
-  });
-
-  avatarUploader.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const url = URL.createObjectURL(file);
-      avatarImg.onload = () => { hasAvatar = true; };
-      avatarImg.src = url;
-    }
-  });
-
-  let dragPtIndex = -1;
-  let isDraggingWholeFrame = false;
-  let lastMouse = { x: 0, y: 0 };
-
-  function isPointInsidePolygon(p, vs) {
-    let x = p.x, y = p.y, inside = false;
-    for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
-      let xi = vs[i].x, yi = vs[i].y, xj = vs[j].x, yj = vs[j].y;
-      let intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-      if (intersect) inside = !inside;
-    }
-    return inside;
-  }
-
-  function getMousePos(e) {
+  // Drag & Drop Puncte
+  let dragPtIndex = -1, isDraggingWholeFrame = false, lastMouse = { x: 0, y: 0 };
+  function getPos(e) {
     const rect = canvas.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     return { x: clientX - rect.left, y: clientY - rect.top };
   }
 
-  function handleStart(e) {
-    const mouse = getMousePos(e);
-    dragPtIndex = -1;
-    isDraggingWholeFrame = false;
-
+  canvas.addEventListener('mousedown', (e) => {
+    const pos = getPos(e);
+    dragPtIndex = -1; isDraggingWholeFrame = false;
     if (showGrid) {
       for (let i = 0; i < pts.length; i++) {
-        if (Math.hypot(pts[i].x - mouse.x, pts[i].y - mouse.y) < 25) {
-          dragPtIndex = i;
-          break;
-        }
+        if (Math.hypot(pts[i].x - pos.x, pts[i].y - pos.y) < 25) { dragPtIndex = i; break; }
       }
     }
+    lastMouse = pos;
+  });
 
-    const outerPoly = [pts[0], pts[1], pts[2], pts[4], pts[7], pts[6], pts[5], pts[3]];
-    if (dragPtIndex === -1 && isPointInsidePolygon(mouse, outerPoly)) {
-      isDraggingWholeFrame = true;
-    }
-    lastMouse = mouse;
-  }
-
-  function handleMove(e) {
-    if (dragPtIndex === -1 && !isDraggingWholeFrame) return;
-    const mouse = getMousePos(e);
-    const dx = mouse.x - lastMouse.x;
-    const dy = mouse.y - lastMouse.y;
-
-    if (dragPtIndex !== -1) {
-      pts[dragPtIndex].x = mouse.x;
-      pts[dragPtIndex].y = mouse.y;
-    } else if (isDraggingWholeFrame) {
-      pts.forEach(p => { p.x += dx; p.y += dy; });
-    }
-    lastMouse = mouse;
+  window.addEventListener('mousemove', (e) => {
+    if (dragPtIndex === -1) return;
+    const pos = getPos(e);
+    pts[dragPtIndex].x = pos.x;
+    pts[dragPtIndex].y = pos.y;
+    lastMouse = pos;
     saveConfig();
-  }
+  });
 
-  function handleEnd() {
-    dragPtIndex = -1;
-    isDraggingWholeFrame = false;
-  }
-
-  canvas.addEventListener('mousedown', handleStart);
-  window.addEventListener('mousemove', handleMove);
-  window.addEventListener('mouseup', handleEnd);
-  canvas.addEventListener('touchstart', handleStart);
-  window.addEventListener('touchmove', handleMove);
-  window.addEventListener('touchend', handleEnd);
+  window.addEventListener('mouseup', () => { dragPtIndex = -1; });
+  canvas.addEventListener('touchstart', (e) => { const pos = getPos(e); });
 
   function drawTriangleUV(media, p0, p1, p2, u0, v0, u1, v1, u2, v2) {
     const w = media.videoWidth || media.width || 1;
     const h = media.videoHeight || media.height || 1;
-
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(p0.x, p0.y);
-    ctx.lineTo(p1.x, p1.y);
-    ctx.lineTo(p2.x, p2.y);
-    ctx.closePath();
-    ctx.clip();
+    ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+    ctx.closePath(); ctx.clip();
 
     const x0 = p0.x, y0 = p0.y, x1 = p1.x, y1 = p1.y, x2 = p2.x, y2 = p2.y;
     const sx0 = u0 * w, sy0 = v0 * h, sx1 = u1 * w, sy1 = v1 * h, sx2 = u2 * w, sy2 = v2 * h;
-
     const denom = (sx0 * (sy1 - sy2) + sx1 * (sy2 - sy0) + sx2 * (sy0 - sy1));
     if (Math.abs(denom) < 1e-5) { ctx.restore(); return; }
 
     const a = (x0 * (sy1 - sy2) + x1 * (sy2 - sy0) + x2 * (sy0 - sy1)) / denom;
     const c = (x0 * (sx2 - sx1) + x1 * (sx0 - sx2) + x2 * (sx1 - sx0)) / denom;
     const e = (x0 * (sx1 * sy2 - sx2 * sy1) + x1 * (sx2 * sy0 - sx0 * sy2) + x2 * (sx0 * sy1 - sx1 * sy0)) / denom;
-
     const b = (y0 * (sy1 - sy2) + y1 * (sy2 - sy0) + y2 * (sy0 - sy1)) / denom;
     const d = (y0 * (sx2 - sx1) + y1 * (sx0 - sx2) + y2 * (sx1 - sx0)) / denom;
     const f = (y0 * (sx1 * sy2 - sx2 * sy1) + y1 * (sx2 * sy0 - sx0 * sy2) + y2 * (sx0 * sy1 - sx1 * sy0)) / denom;
@@ -313,13 +353,12 @@
     ctx.restore();
   }
 
-  function renderSingleVideo8Points(media) {
+  function renderTorso8Points(media) {
     const [p0, p1, p2, p3, p4, p5, p6, p7] = pts;
     const center = {
       x: ((p1.x + p6.x) / 2 + (p3.x + p4.x) / 2) / 2,
       y: ((p1.y + p6.y) / 2 + (p3.y + p4.y) / 2) / 2
     };
-
     drawTriangleUV(media, p0, p1, center, 0, 0, 0.5, 0, 0.5, 0.5);
     drawTriangleUV(media, p0, center, p3, 0, 0, 0.5, 0.5, 0, 0.5);
     drawTriangleUV(media, p1, p2, center, 0.5, 0, 1, 0, 0.5, 0.5);
@@ -330,13 +369,13 @@
     drawTriangleUV(media, center, p6, p5, 0.5, 0.5, 0.5, 1, 0, 1);
   }
 
-  // MediaPipe AI Setup
+  // MediaPipe Setup
   let latestPoseResults = null;
   let latestFaceResults = null;
   let latestSegmentationResults = null;
 
   const pose = new Pose({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
-  pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+  pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5 });
   pose.onResults((r) => { latestPoseResults = r; });
 
   const faceMesh = new FaceMesh({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}` });
@@ -347,107 +386,92 @@
   selfieSegmentation.setOptions({ modelSelection: 1 });
   selfieSegmentation.onResults((r) => { latestSegmentationResults = r; });
 
-  function drawPoseSkeleton(landmarks) {
-    const w = canvas.width;
-    const h = canvas.height;
-    const connections = [
-      [11, 12], [11, 23], [12, 24], [23, 24],
-      [11, 13], [13, 15], [12, 14], [14, 16]
-    ];
-
-    ctx.strokeStyle = '#00ffcc';
-    ctx.lineWidth = 4;
-    ctx.lineCap = 'round';
-
-    connections.forEach(([i, j]) => {
-      const p1 = landmarks[i];
-      const p2 = landmarks[j];
-      if (p1 && p2 && p1.visibility > 0.4 && p2.visibility > 0.4) {
-        ctx.beginPath();
-        ctx.moveTo(p1.x * w, p1.y * h);
-        ctx.lineTo(p2.x * w, p2.y * h);
-        ctx.stroke();
-      }
-    });
-  }
-
   function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const w = canvas.width;
+    const h = canvas.height;
 
-    // 1. STRATUL 1: Camera Reală / AI Cut (Tu ești în spate)
+    // 1. Fundal Custom (Dacă este activ)
+    if (useBg && currentBgMedia) {
+      if (currentBgMedia === bgImg || currentBgMedia.readyState >= 2) {
+        ctx.drawImage(currentBgMedia, 0, 0, w, h);
+      }
+    }
+
+    // 2. Camera Reală & AI Crop
     if (showCamera && webcamElem.readyState >= 2) {
       if (isAiCutOn && latestSegmentationResults) {
         ctx.save();
-        ctx.drawImage(latestSegmentationResults.segmentationMask, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(latestSegmentationResults.segmentationMask, 0, 0, w, h);
         ctx.globalCompositeOperation = 'source-in';
-        ctx.drawImage(webcamElem, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(webcamElem, 0, 0, w, h);
         ctx.restore();
       } else {
-        ctx.save();
-        ctx.globalAlpha = 0.85;
-        ctx.drawImage(webcamElem, 0, 0, canvas.width, canvas.height);
-        ctx.restore();
+        ctx.drawImage(webcamElem, 0, 0, w, h);
       }
     }
 
-    // 2. STRATUL 2: Schelet Brațe / Torso (Controlat independent din butonul ON/OFF)
-    if (showPose && latestPoseResults && latestPoseResults.poseLandmarks) {
-      drawPoseSkeleton(latestPoseResults.poseLandmarks);
+    // 3. Brațe & Schelet (Dacă sunt active)
+    if (latestPoseResults && latestPoseResults.poseLandmarks) {
+      const lm = latestPoseResults.poseLandmarks;
+      const tSize = parseInt(document.getElementById('thicknessArms').value);
+
+      ctx.strokeStyle = '#00ffcc';
+      ctx.lineWidth = tSize;
+      ctx.lineCap = 'round';
+
+      const links = [[11, 13], [13, 15], [12, 14], [14, 16], [11, 12], [23, 24]];
+      links.forEach(([i, j]) => {
+        if (lm[i] && lm[j] && lm[i].visibility > 0.4 && lm[j].visibility > 0.4) {
+          ctx.beginPath();
+          ctx.moveTo(lm[i].x * w, lm[i].y * h);
+          ctx.lineTo(lm[j].x * w, lm[j].y * h);
+          ctx.stroke();
+        }
+      });
     }
 
-    // 3. STRATUL 3: Mască PNG Ancorată pe Cap
-    if (hasAvatar && latestFaceResults && latestFaceResults.multiFaceLandmarks.length > 0) {
+    // 4. Mască Cap (Ancorată pe față)
+    if (useCap && latestFaceResults && latestFaceResults.multiFaceLandmarks.length > 0) {
       const landmarks = latestFaceResults.multiFaceLandmarks[0];
       const nose = landmarks[1];
-      const headX = nose.x * canvas.width + parseFloat(offsetXSlider.value);
-      const headY = nose.y * canvas.height + parseFloat(offsetYSlider.value);
-      const scale = parseFloat(scaleSlider.value);
-      const rot = parseFloat(rotationSlider.value) * Math.PI / 180;
+      const headX = nose.x * w;
+      const headY = nose.y * h;
+      const scale = parseFloat(scaleCap.value);
 
       ctx.save();
       ctx.translate(headX, headY);
-      ctx.rotate(rot);
-      const aW = avatarImg.width * scale;
-      const aH = avatarImg.height * scale;
-      ctx.drawImage(avatarImg, -aW / 2, -aH / 2, aW, aH);
+      const cW = capImg.width * scale;
+      const cH = capImg.height * scale;
+      ctx.drawImage(capImg, -cW / 2, -cH / 2, cW, cH);
       ctx.restore();
-      statusEl.innerText = "Tracking Activ (Mască & Pose)";
-    } else {
-      statusEl.innerText = "Căutare față / cameră...";
     }
 
-    // 4. STRATUL 4 (DEASUPRA TA): Video/Foto Torso mapat pe cele 8 puncte
-    if (currentMedia) {
-      if (currentMedia === imageElem || (currentMedia === videoElem && videoElem.readyState >= 2)) {
-        renderSingleVideo8Points(currentMedia);
+    // 5. DEASUPRA TA: Torso Video/Foto Mapat pe Cele 8 Puncte
+    if (useTorso && currentTorsoMedia) {
+      if (currentTorsoMedia.readyState >= 2 || currentTorsoMedia.width) {
+        renderTorso8Points(currentTorsoMedia);
       }
     }
 
-    // 5. STRATUL 5 (FAȚĂ): Grila de 8 puncte pentru control
+    // 6. Grila de 8 puncte
     if (showGrid) {
       const [p0, p1, p2, p3, p4, p5, p6, p7] = pts;
-      ctx.strokeStyle = 'rgba(0, 255, 204, 0.5)';
+      ctx.strokeStyle = 'rgba(0, 255, 204, 0.6)';
       ctx.lineWidth = 1.5;
 
       ctx.beginPath();
       ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
       ctx.lineTo(p4.x, p4.y); ctx.lineTo(p7.x, p7.y); ctx.lineTo(p6.x, p6.y);
       ctx.lineTo(p5.x, p5.y); ctx.lineTo(p3.x, p3.y); ctx.closePath();
-
-      ctx.moveTo(p1.x, p1.y); ctx.lineTo(p6.x, p6.y);
-      ctx.moveTo(p3.x, p3.y); ctx.lineTo(p4.x, p4.y);
-      ctx.moveTo(p0.x, p0.y); ctx.lineTo(p7.x, p7.y);
-      ctx.moveTo(p2.x, p2.y); ctx.lineTo(p5.x, p5.y);
       ctx.stroke();
 
       pts.forEach((p, idx) => {
-        ctx.fillStyle = (idx === 1 || idx === 6 || idx === 3 || idx === 4) ? '#ff0055' : '#00ffcc';
+        ctx.fillStyle = (idx === 1 || idx === 6) ? '#ff0055' : '#00ffcc';
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+        ctx.strokeStyle = '#fff'; ctx.stroke();
       });
     }
 
@@ -456,29 +480,22 @@
 
   async function initCamera() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 1280, height: 720 },
-        audio: false
-      });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: false });
       webcamElem.srcObject = stream;
       await webcamElem.play();
 
       const camera = new window.Camera(webcamElem, {
         onFrame: async () => {
-          if (showCamera || showPose || hasAvatar) {
-            if (isAiCutOn) await selfieSegmentation.send({ image: webcamElem });
-            if (showPose) await pose.send({ image: webcamElem });
-            if (hasAvatar) await faceMesh.send({ image: webcamElem });
-          }
+          if (isAiCutOn) await selfieSegmentation.send({ image: webcamElem });
+          await pose.send({ image: webcamElem });
+          if (useCap) await faceMesh.send({ image: webcamElem });
         },
-        width: 640,
-        height: 480
+        width: 640, height: 480
       });
       camera.start();
       render();
     } catch (err) {
-      statusEl.innerText = "Eroare acces cameră!";
-      console.error(err);
+      document.getElementById('status').innerText = "Eroare cameră!";
       render();
     }
   }
