@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>VTuber Studio v2.5 - Complete Final Edition</title>
+  <title>VTuber Studio v2.5 - Correct Layering & Torso Mapping</title>
 
   <!-- MediaPipe CDNs -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -65,7 +65,7 @@
 <div id="app-container">
   <div id="top-bar">
     <label class="btn-action btn-active">
-      🎬 Video/Foto Fundal
+      🎬 Video/Foto Torso (8 Puncte)
       <input type="file" id="mediaInput" accept="video/*,image/*" class="file-input">
     </label>
 
@@ -76,7 +76,7 @@
     
     <button id="toggle-grid" class="btn-action btn-active">Grilă: ON</button>
     <button id="toggle-cam" class="btn-action btn-active">Cameră: ON</button>
-    <button id="toggle-pose" class="btn-action btn-active">Brațe & Torso: ON</button>
+    <button id="toggle-pose" class="btn-action btn-active">Brațe / Torso (Pose): ON</button>
     <button id="toggle-ai-cut" class="btn-action">AI Cut Corp: OFF</button>
     <button id="reset-btn" class="btn-action btn-reset">Resetare</button>
   </div>
@@ -133,7 +133,7 @@
   window.addEventListener('resize', resizeCanvas);
   resizeCanvas();
 
-  /* 8 Puncte Mapping */
+  /* 8 Puncte Mapping (Torso) */
   function getDefaultPoints() {
     const w = canvas.width;
     const h = canvas.height;
@@ -174,7 +174,7 @@
 
   togglePoseBtn.addEventListener('click', () => {
     showPose = !showPose;
-    togglePoseBtn.innerText = `Brațe & Torso: ${showPose ? 'ON' : 'OFF'}`;
+    togglePoseBtn.innerText = `Brațe / Torso (Pose): ${showPose ? 'ON' : 'OFF'}`;
     togglePoseBtn.classList.toggle('btn-active', showPose);
   });
 
@@ -374,14 +374,7 @@
   function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 1. STRATUL 1 (SPATE): Fundal Video/Foto pe cele 8 puncte (Mapping 3D)
-    if (currentMedia) {
-      if (currentMedia === imageElem || (currentMedia === videoElem && videoElem.readyState >= 2)) {
-        renderSingleVideo8Points(currentMedia);
-      }
-    }
-
-    // 2. STRATUL 2: Camera Reală / AI Cut
+    // 1. STRATUL 1: Camera Reală / AI Cut (Tu ești în spate)
     if (showCamera && webcamElem.readyState >= 2) {
       if (isAiCutOn && latestSegmentationResults) {
         ctx.save();
@@ -391,18 +384,18 @@
         ctx.restore();
       } else {
         ctx.save();
-        ctx.globalAlpha = 0.8;
+        ctx.globalAlpha = 0.85;
         ctx.drawImage(webcamElem, 0, 0, canvas.width, canvas.height);
         ctx.restore();
       }
     }
 
-    // 3. STRATUL 3: Schelet Brațe / Torso
+    // 2. STRATUL 2: Schelet Brațe / Torso (Controlat independent din butonul ON/OFF)
     if (showPose && latestPoseResults && latestPoseResults.poseLandmarks) {
       drawPoseSkeleton(latestPoseResults.poseLandmarks);
     }
 
-    // 4. STRATUL 4: Mască PNG Ancorată pe Cap
+    // 3. STRATUL 3: Mască PNG Ancorată pe Cap
     if (hasAvatar && latestFaceResults && latestFaceResults.multiFaceLandmarks.length > 0) {
       const landmarks = latestFaceResults.multiFaceLandmarks[0];
       const nose = landmarks[1];
@@ -423,7 +416,14 @@
       statusEl.innerText = "Căutare față / cameră...";
     }
 
-    // 5. STRATUL 5 (FAȚĂ): Grila de 8 puncte
+    // 4. STRATUL 4 (DEASUPRA TA): Video/Foto Torso mapat pe cele 8 puncte
+    if (currentMedia) {
+      if (currentMedia === imageElem || (currentMedia === videoElem && videoElem.readyState >= 2)) {
+        renderSingleVideo8Points(currentMedia);
+      }
+    }
+
+    // 5. STRATUL 5 (FAȚĂ): Grila de 8 puncte pentru control
     if (showGrid) {
       const [p0, p1, p2, p3, p4, p5, p6, p7] = pts;
       ctx.strokeStyle = 'rgba(0, 255, 204, 0.5)';
