@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>3D Studio Mapper - Complete VTuber Edition</title>
+  <title>VTuber Studio v2.5 - Final Torso & Body Mapping</title>
 
   <!-- MediaPipe CDNs -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -23,7 +23,7 @@
     canvas { display: block; width: 100vw; height: 100vh; background: #000; cursor: crosshair; }
     #webcam, #torsoVid, #bgVid { display: none; }
 
-    /* Panou Control Stânga (Exact ca în poză) */
+    /* Panou Control Stânga */
     #control-panel {
       position: absolute; top: 15px; left: 15px; z-index: 30;
       background: rgba(10, 10, 20, 0.92); padding: 14px;
@@ -57,22 +57,16 @@
     .slider-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 10px; }
     .slider-row input { flex: 1; accent-color: #00ffcc; }
 
-    /* Buton Hide Controls (Dreapta Sus) */
-    #hideControlsBtn {
-      position: absolute; top: 15px; right: 15px; z-index: 30;
+    /* Butoane Sus Dreapta */
+    .top-right-btns { position: absolute; top: 15px; right: 15px; z-index: 30; display: flex; gap: 8px; }
+    .action-btn {
       background: rgba(0, 255, 204, 0.2); color: #00ffcc; border: 1px solid #00ffcc;
       padding: 8px 14px; font-size: 11px; border-radius: 8px; cursor: pointer; font-weight: bold;
       backdrop-filter: blur(10px); box-shadow: 0 4px 15px rgba(0,0,0,0.5);
     }
-    #hideControlsBtn:hover { background: rgba(0, 255, 204, 0.4); }
-
-    /* Cercul de Previzualizare Cap (Sus Dreapta) */
-    #headPreviewCircle {
-      position: absolute; top: 70px; right: 30px; width: 180px; height: 180px;
-      border: 2px solid rgba(0, 255, 204, 0.5); border-radius: 50%; z-index: 10;
-      display: flex; align-items: center; justify-content: center; pointer-events: none;
-      background: rgba(0,0,0,0.2); backdrop-filter: blur(2px);
-    }
+    .action-btn:hover { background: rgba(0, 255, 204, 0.4); }
+    #recBtn.recording { background: rgba(255, 0, 0, 0.8); border-color: red; color: #fff; animation: pulse 1s infinite; }
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
 
     #status {
       position: absolute; bottom: 15px; left: 15px; z-index: 10;
@@ -84,14 +78,16 @@
 <body>
 
 <div id="app-container">
-  <!-- Buton Hide Controls -->
-  <button id="hideControlsBtn">👁 Hide Controls</button>
+  <div class="top-right-btns">
+    <button id="recBtn" class="action-btn">⏺ REC (MP4)</button>
+    <button id="fullscreenBtn" class="action-btn">🔲 Fullscreen</button>
+    <button id="hideControlsBtn" class="action-btn">👁 Hide Controls</button>
+  </div>
 
   <!-- Panou Stânga -->
   <div id="control-panel">
-    <div style="font-size: 11px; font-weight: bold; color: #00ffcc;" id="headFileInfo">Imagine încărcată pentru head!</div>
+    <div style="font-size: 11px; font-weight: bold; color: #00ffcc;">VTuber Studio v2.5 Control Panel</div>
 
-    <!-- COMUTATOARE GENERALE -->
     <div class="panel-section">
       <div class="panel-title">Comutatoare Generale</div>
       <div style="display: flex; gap: 6px;">
@@ -131,24 +127,11 @@
       </div>
     </div>
 
-    <!-- MODEL 3D SEPARABIL -->
-    <div class="panel-section">
-      <div class="panel-title">Model 3D Separabil (GLB / GLTF)</div>
-      <div class="row-group">
-        <button id="toggle3D" class="btn-toggle">Model 3D: OFF</button>
-        <label class="file-btn">Choose File <input type="file" id="model3dInput" accept=".glb,.gltf" class="file-input"></label>
-        <span class="file-name" id="model3dFileName">No file chosen</span>
-      </div>
-      <div class="slider-row"><label>Scală 3D:</label><input type="range" id="scale3d" min="0.1" max="3" step="0.1" value="1"></div>
-      <div class="slider-row"><label>Offset X 3D:</label><input type="range" id="offsetX3d" min="-200" max="200" step="1" value="0"></div>
-      <div class="slider-row"><label>Offset Y 3D:</label><input type="range" id="offsetY3d" min="-200" max="200" step="1" value="0"></div>
-    </div>
-
     <!-- CALIBRARE MANUALĂ CAP & BRAȚE -->
     <div class="panel-section">
       <div class="panel-title">Calibrare Manuală Cap & Brațe</div>
       <div class="slider-row"><label>Scală Cap:</label><input type="range" id="scaleCap" min="0.1" max="3" step="0.05" value="1"></div>
-      <div class="slider-row"><label>Grosime Brațe:</label><input type="range" id="thicknessArms" min="1" max="20" step="1" value="4"></div>
+      <div class="slider-row"><label>Grosime Brațe:</label><input type="range" id="thicknessArms" min="2" max="30" step="1" value="10"></div>
     </div>
 
     <!-- FUNDAL CUSTOM -->
@@ -162,14 +145,10 @@
     </div>
   </div>
 
-  <!-- Cercul Head Preview -->
-  <div id="headPreviewCircle"></div>
-
   <div id="status">Sistem pregătit...</div>
   <canvas id="canvas"></canvas>
 </div>
 
-<!-- Elemente Media ascunse -->
 <video id="webcam" playsinline muted></video>
 <video id="torsoVid" loop muted playsinline crossorigin="anonymous"></video>
 <video id="bgVid" loop muted playsinline crossorigin="anonymous"></video>
@@ -186,7 +165,6 @@
   const armRImg = new Image();
   const bgImg = new Image();
 
-  // Stări comutatoare & elemente
   let showGrid = true;
   let isAiCutOn = false;
   let showCamera = true;
@@ -194,7 +172,6 @@
   let useTorso = false;
   let useArmL = false;
   let useArmR = false;
-  let use3D = false;
   let useBg = false;
 
   let currentTorsoMedia = null;
@@ -207,12 +184,16 @@
   window.addEventListener('resize', resizeCanvas);
   resizeCanvas();
 
-  // UI Interacțiuni Panou
+  // Control UI Hide/Show
   const controlPanel = document.getElementById('control-panel');
-  const hideControlsBtn = document.getElementById('hideControlsBtn');
-  hideControlsBtn.addEventListener('click', () => {
+  document.getElementById('hideControlsBtn').addEventListener('click', () => {
     controlPanel.classList.toggle('hidden');
-    hideControlsBtn.innerText = controlPanel.classList.contains('hidden') ? '👁 Show Controls' : '👁 Hide Controls';
+    document.getElementById('hideControlsBtn').innerText = controlPanel.classList.contains('hidden') ? '👁 Show' : '👁 Hide Controls';
+  });
+
+  document.getElementById('fullscreenBtn').addEventListener('click', () => {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+    else if (document.exitFullscreen) document.exitFullscreen();
   });
 
   document.getElementById('toggleGrid').addEventListener('click', (e) => {
@@ -233,8 +214,37 @@
     e.target.classList.toggle('active', showCamera);
   });
 
-  // Gestionare Fișiere & Status Butoane
-  function setupFileHandler(inputId, statusId, nameId, callback, typeToggleBtn) {
+  // Înregistrare Video MP4 cu Auto-Download
+  let mediaRecorder, recordedChunks = [], isRecording = false;
+  const recBtn = document.getElementById('recBtn');
+  recBtn.addEventListener('click', () => {
+    if (!isRecording) {
+      recordedChunks = [];
+      const stream = canvas.captureStream(30);
+      mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(recordedChunks, { type: 'video/mp4' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `VTuber_Studio_${Date.now()}.mp4`;
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 100);
+      };
+      mediaRecorder.start();
+      isRecording = true;
+      recBtn.classList.add('recording');
+      recBtn.innerText = '⏹ STOP REC';
+    } else {
+      mediaRecorder.stop();
+      isRecording = false;
+      recBtn.classList.remove('recording');
+      recBtn.innerText = '⏺ REC (MP4)';
+    }
+  });
+
+  // Gestionare Fișiere
+  function setupFileHandler(inputId, statusId, nameId, callback) {
     const input = document.getElementById(inputId);
     const status = document.getElementById(statusId);
     const nameSpan = document.getElementById(nameId);
@@ -272,31 +282,21 @@
     useBg = true;
   });
 
-  // MAPPING 8 PUNCTE PENTRU TORSO / CADRU 3D
+  // MAPPING 8 PUNCTE TORSO (Poate fi mutat oriunde cu mouse/touch)
   function getDefaultPoints() {
-    const w = canvas.width;
-    const h = canvas.height;
+    const w = canvas.width; const h = canvas.height;
     return [
-      { x: w * 0.35, y: h * 0.40 },
-      { x: w * 0.50, y: h * 0.38 },
-      { x: w * 0.65, y: h * 0.40 },
-      { x: w * 0.35, y: h * 0.65 },
-      { x: w * 0.65, y: h * 0.65 },
-      { x: w * 0.32, y: h * 0.90 },
-      { x: w * 0.50, y: h * 0.92 },
-      { x: w * 0.68, y: h * 0.90 }
+      { x: w * 0.35, y: h * 0.35 }, { x: w * 0.50, y: h * 0.33 }, { x: w * 0.65, y: h * 0.35 },
+      { x: w * 0.35, y: h * 0.60 }, { x: w * 0.65, y: h * 0.60 },
+      { x: w * 0.32, y: h * 0.85 }, { x: w * 0.50, y: h * 0.88 }, { x: w * 0.68, y: h * 0.85 }
     ];
   }
 
   let pts = JSON.parse(localStorage.getItem('v40_torso_8pts')) || getDefaultPoints();
   function saveConfig() { localStorage.setItem('v40_torso_8pts', JSON.stringify(pts)); }
 
-  document.getElementById('resetGrid').addEventListener('click', () => {
-    pts = getDefaultPoints();
-    saveConfig();
-  });
+  document.getElementById('resetGrid').addEventListener('click', () => { pts = getDefaultPoints(); saveConfig(); });
 
-  // Drag & Drop Puncte
   let dragPtIndex = -1, isDraggingWholeFrame = false, lastMouse = { x: 0, y: 0 };
   function getPos(e) {
     const rect = canvas.getBoundingClientRect();
@@ -305,34 +305,45 @@
     return { x: clientX - rect.left, y: clientY - rect.top };
   }
 
+  function isPointInsidePolygon(p, vs) {
+    let x = p.x, y = p.y, inside = false;
+    for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+      let xi = vs[i].x, yi = vs[i].y, xj = vs[j].x, yj = vs[j].y;
+      let intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
   canvas.addEventListener('mousedown', (e) => {
     const pos = getPos(e);
     dragPtIndex = -1; isDraggingWholeFrame = false;
     if (showGrid) {
       for (let i = 0; i < pts.length; i++) {
-        if (Math.hypot(pts[i].x - pos.x, pts[i].y - pos.y) < 25) { dragPtIndex = i; break; }
+        if (Math.hypot(pts[i].x - pos.x, pts[i].y - pos.y) < 30) { dragPtIndex = i; break; }
       }
     }
+    const outerPoly = [pts[0], pts[1], pts[2], pts[4], pts[7], pts[6], pts[5], pts[3]];
+    if (dragPtIndex === -1 && isPointInsidePolygon(pos, outerPoly)) isDraggingWholeFrame = true;
     lastMouse = pos;
   });
 
   window.addEventListener('mousemove', (e) => {
-    if (dragPtIndex === -1) return;
+    if (dragPtIndex === -1 && !isDraggingWholeFrame) return;
     const pos = getPos(e);
-    pts[dragPtIndex].x = pos.x;
-    pts[dragPtIndex].y = pos.y;
-    lastMouse = pos;
-    saveConfig();
+    const dx = pos.x - lastMouse.x; const dy = pos.y - lastMouse.y;
+    if (dragPtIndex !== -1) { pts[dragPtIndex].x = pos.x; pts[dragPtIndex].y = pos.y; }
+    else if (isDraggingWholeFrame) { pts.forEach(p => { p.x += dx; p.y += dy; }); }
+    lastMouse = pos; saveConfig();
   });
 
-  window.addEventListener('mouseup', () => { dragPtIndex = -1; });
+  window.addEventListener('mouseup', () => { dragPtIndex = -1; isDraggingWholeFrame = false; });
   canvas.addEventListener('touchstart', (e) => { const pos = getPos(e); });
 
   function drawTriangleUV(media, p0, p1, p2, u0, v0, u1, v1, u2, v2) {
     const w = media.videoWidth || media.width || 1;
     const h = media.videoHeight || media.height || 1;
-    ctx.save();
-    ctx.beginPath();
+    ctx.save(); ctx.beginPath();
     ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
     ctx.closePath(); ctx.clip();
 
@@ -355,47 +366,37 @@
 
   function renderTorso8Points(media) {
     const [p0, p1, p2, p3, p4, p5, p6, p7] = pts;
-    const center = {
-      x: ((p1.x + p6.x) / 2 + (p3.x + p4.x) / 2) / 2,
-      y: ((p1.y + p6.y) / 2 + (p3.y + p4.y) / 2) / 2
-    };
+    const center = { x: ((p1.x + p6.x)/2 + (p3.x + p4.x)/2)/2, y: ((p1.y + p6.y)/2 + (p3.y + p4.y)/2)/2 };
     drawTriangleUV(media, p0, p1, center, 0, 0, 0.5, 0, 0.5, 0.5);
     drawTriangleUV(media, p0, center, p3, 0, 0, 0.5, 0.5, 0, 0.5);
     drawTriangleUV(media, p1, p2, center, 0.5, 0, 1, 0, 0.5, 0.5);
     drawTriangleUV(media, p2, p4, center, 1, 0, 1, 0.5, 0.5, 0.5);
     drawTriangleUV(media, center, p4, p7, 0.5, 0.5, 1, 0.5, 1, 1);
     drawTriangleUV(media, center, p7, p6, 0.5, 0.5, 1, 1, 0.5, 1);
-    drawTriangleUV(media, p3, center, p5, 0, 0.5, 0.5, 0.5, 0, 1);
+    drawTriangleUV(media, center, p3, p5, 0, 0.5, 0.5, 0.5, 0, 1);
     drawTriangleUV(media, center, p6, p5, 0.5, 0.5, 0.5, 1, 0, 1);
   }
 
-  // MediaPipe Setup
-  let latestPoseResults = null;
-  let latestFaceResults = null;
-  let latestSegmentationResults = null;
-
+  let latestPoseResults = null, latestFaceResults = null, latestSegmentationResults = null;
   const pose = new Pose({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
   pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5 });
-  pose.onResults((r) => { latestPoseResults = r; });
+  pose.onResults(r => latestPoseResults = r);
 
   const faceMesh = new FaceMesh({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}` });
   faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5 });
-  faceMesh.onResults((r) => { latestFaceResults = r; });
+  faceMesh.onResults(r => latestFaceResults = r);
 
   const selfieSegmentation = new SelfieSegmentation({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}` });
   selfieSegmentation.setOptions({ modelSelection: 1 });
-  selfieSegmentation.onResults((r) => { latestSegmentationResults = r; });
+  selfieSegmentation.onResults(r => latestSegmentationResults = r);
 
   function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const w = canvas.width;
-    const h = canvas.height;
+    const w = canvas.width; const h = canvas.height;
 
-    // 1. Fundal Custom (Dacă este activ)
-    if (useBg && currentBgMedia) {
-      if (currentBgMedia === bgImg || currentBgMedia.readyState >= 2) {
-        ctx.drawImage(currentBgMedia, 0, 0, w, h);
-      }
+    // 1. Fundal Custom
+    if (useBg && currentBgMedia && (currentBgMedia === bgImg || currentBgMedia.readyState >= 2)) {
+      ctx.drawImage(currentBgMedia, 0, 0, w, h);
     }
 
     // 2. Camera Reală & AI Crop
@@ -411,66 +412,47 @@
       }
     }
 
-    // 3. Brațe & Schelet (Dacă sunt active)
+    // 3. Brațe, Degete și Torso (Cu grosime ajustabilă și imagini custom opționale)
     if (latestPoseResults && latestPoseResults.poseLandmarks) {
       const lm = latestPoseResults.poseLandmarks;
       const tSize = parseInt(document.getElementById('thicknessArms').value);
 
-      ctx.strokeStyle = '#00ffcc';
-      ctx.lineWidth = tSize;
-      ctx.lineCap = 'round';
-
-      const links = [[11, 13], [13, 15], [12, 14], [14, 16], [11, 12], [23, 24]];
+      ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = tSize; ctx.lineCap = 'round';
+      const links = [[11, 13], [13, 15], [12, 14], [14, 16], [11, 12], [23, 24], [15, 17], [16, 22]]; // Inclusiv degete/palme
       links.forEach(([i, j]) => {
-        if (lm[i] && lm[j] && lm[i].visibility > 0.4 && lm[j].visibility > 0.4) {
-          ctx.beginPath();
-          ctx.moveTo(lm[i].x * w, lm[i].y * h);
-          ctx.lineTo(lm[j].x * w, lm[j].y * h);
-          ctx.stroke();
+        if (lm[i] && lm[j] && lm[i].visibility > 0.3 && lm[j].visibility > 0.3) {
+          ctx.beginPath(); ctx.moveTo(lm[i].x * w, lm[i].y * h); ctx.lineTo(lm[j].x * w, lm[j].y * h); ctx.stroke();
         }
       });
     }
 
-    // 4. Mască Cap (Ancorată pe față)
+    // 4. Mască Cap (PNG)
     if (useCap && latestFaceResults && latestFaceResults.multiFaceLandmarks.length > 0) {
-      const landmarks = latestFaceResults.multiFaceLandmarks[0];
-      const nose = landmarks[1];
-      const headX = nose.x * w;
-      const headY = nose.y * h;
-      const scale = parseFloat(scaleCap.value);
-
+      const nose = latestFaceResults.multiFaceLandmarks[0][1];
+      const scale = parseFloat(document.getElementById('scaleCap').value);
       ctx.save();
-      ctx.translate(headX, headY);
-      const cW = capImg.width * scale;
-      const cH = capImg.height * scale;
-      ctx.drawImage(capImg, -cW / 2, -cH / 2, cW, cH);
+      ctx.translate(nose.x * w, nose.y * h);
+      ctx.drawImage(capImg, -(capImg.width * scale)/2, -(capImg.height * scale)/2, capImg.width * scale, capImg.height * scale);
       ctx.restore();
     }
 
-    // 5. DEASUPRA TA: Torso Video/Foto Mapat pe Cele 8 Puncte
-    if (useTorso && currentTorsoMedia) {
-      if (currentTorsoMedia.readyState >= 2 || currentTorsoMedia.width) {
-        renderTorso8Points(currentTorsoMedia);
-      }
+    // 5. TORSO MAPPING (Deasupra ta, mutat unde vrei prin 8 puncte)
+    if (useTorso && currentTorsoMedia && (currentTorsoMedia.readyState >= 2 || currentTorsoMedia.width)) {
+      renderTorso8Points(currentTorsoMedia);
     }
 
-    // 6. Grila de 8 puncte
+    // 6. Grid 8 Puncte
     if (showGrid) {
       const [p0, p1, p2, p3, p4, p5, p6, p7] = pts;
-      ctx.strokeStyle = 'rgba(0, 255, 204, 0.6)';
-      ctx.lineWidth = 1.5;
-
+      ctx.strokeStyle = 'rgba(0, 255, 204, 0.6)'; ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
       ctx.lineTo(p4.x, p4.y); ctx.lineTo(p7.x, p7.y); ctx.lineTo(p6.x, p6.y);
-      ctx.lineTo(p5.x, p5.y); ctx.lineTo(p3.x, p3.y); ctx.closePath();
-      ctx.stroke();
+      ctx.lineTo(p5.x, p5.y); ctx.lineTo(p3.x, p3.y); ctx.closePath(); ctx.stroke();
 
       pts.forEach((p, idx) => {
         ctx.fillStyle = (idx === 1 || idx === 6) ? '#ff0055' : '#00ffcc';
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(p.x, p.y, 8, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = '#fff'; ctx.stroke();
       });
     }
@@ -481,9 +463,7 @@
   async function initCamera() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: false });
-      webcamElem.srcObject = stream;
-      await webcamElem.play();
-
+      webcamElem.srcObject = stream; await webcamElem.play();
       const camera = new window.Camera(webcamElem, {
         onFrame: async () => {
           if (isAiCutOn) await selfieSegmentation.send({ image: webcamElem });
@@ -492,11 +472,9 @@
         },
         width: 640, height: 480
       });
-      camera.start();
-      render();
+      camera.start(); render();
     } catch (err) {
-      document.getElementById('status').innerText = "Eroare cameră!";
-      render();
+      document.getElementById('status').innerText = "Eroare cameră!"; render();
     }
   }
 
