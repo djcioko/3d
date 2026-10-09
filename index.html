@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>3D Studio Mapper - Complete Tracking & 8-Point Mapping</title>
+  <title>VTuber Studio v2.5 - Complete Final Edition</title>
 
-  <!-- MediaPipe CDNs (FaceMesh, Pose, Segmentation & Camera Utils) -->
+  <!-- MediaPipe CDNs -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
@@ -23,7 +23,6 @@
     canvas { display: block; width: 100vw; height: 100vh; background: #000; cursor: crosshair; }
     #webcam, #vid { display: none; }
 
-    /* Panou Controale Sus */
     #top-bar {
       position: absolute; top: 15px; left: 15px; z-index: 20;
       background: rgba(10, 10, 20, 0.9); padding: 10px 14px;
@@ -45,7 +44,6 @@
     .btn-reset { border-color: #ff3366; color: #ff3366; }
     .btn-reset:hover { background: rgba(255, 51, 102, 0.2); }
 
-    /* Panou Ajustare Mască PNG */
     #mask-panel {
       position: absolute; bottom: 15px; left: 15px; z-index: 20;
       background: rgba(10, 10, 20, 0.9); padding: 12px; border-radius: 10px;
@@ -72,19 +70,19 @@
     </label>
 
     <label class="btn-action">
-      🎭 Incarcă Mască PNG
+      🎭 Încarcă Mască PNG
       <input type="file" id="avatarUploader" accept="image/*" class="file-input">
     </label>
     
     <button id="toggle-grid" class="btn-action btn-active">Grilă: ON</button>
     <button id="toggle-cam" class="btn-action btn-active">Cameră: ON</button>
-    <button id="toggle-pose" class="btn-action btn-active">Brațe/Degete/Torso: ON</button>
+    <button id="toggle-pose" class="btn-action btn-active">Brațe & Torso: ON</button>
     <button id="toggle-ai-cut" class="btn-action">AI Cut Corp: OFF</button>
-    <button id="reset-btn" class="btn-action btn-reset">Resetare Grilă</button>
+    <button id="reset-btn" class="btn-action btn-reset">Resetare</button>
   </div>
 
   <div id="mask-panel">
-    <strong style="color:#00ffcc;">Setări Mască PNG (Cap)</strong>
+    <strong style="color:#00ffcc;">Setări Mască Cap (PNG)</strong>
     <div class="slider-row"><label>Dimensiune:</label><input type="range" id="scaleSlider" min="0.2" max="3" step="0.05" value="1"></div>
     <div class="slider-row"><label>Rotație:</label><input type="range" id="rotationSlider" min="-180" max="180" step="1" value="0"></div>
     <div class="slider-row"><label>Offset X:</label><input type="range" id="offsetXSlider" min="-300" max="300" step="1" value="0"></div>
@@ -135,7 +133,7 @@
   window.addEventListener('resize', resizeCanvas);
   resizeCanvas();
 
-  /* MAPPING 8 PUNCTE */
+  /* 8 Puncte Mapping */
   function getDefaultPoints() {
     const w = canvas.width;
     const h = canvas.height;
@@ -176,7 +174,7 @@
 
   togglePoseBtn.addEventListener('click', () => {
     showPose = !showPose;
-    togglePoseBtn.innerText = `Brațe/Degete/Torso: ${showPose ? 'ON' : 'OFF'}`;
+    togglePoseBtn.innerText = `Brațe & Torso: ${showPose ? 'ON' : 'OFF'}`;
     togglePoseBtn.classList.toggle('btn-active', showPose);
   });
 
@@ -186,11 +184,9 @@
     toggleAiCutBtn.classList.toggle('btn-active', isAiCutOn);
   });
 
-  // Upload Video / Foto Fundal
   mediaInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     const url = URL.createObjectURL(file);
     if (file.type.startsWith('video/')) {
       videoElem.src = url;
@@ -207,7 +203,6 @@
     }
   });
 
-  // Upload Mască PNG
   avatarUploader.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -217,7 +212,6 @@
     }
   });
 
-  // DRAG & DROP MAPPING
   let dragPtIndex = -1;
   let isDraggingWholeFrame = false;
   let lastMouse = { x: 0, y: 0 };
@@ -257,13 +251,11 @@
     if (dragPtIndex === -1 && isPointInsidePolygon(mouse, outerPoly)) {
       isDraggingWholeFrame = true;
     }
-
     lastMouse = mouse;
   }
 
   function handleMove(e) {
     if (dragPtIndex === -1 && !isDraggingWholeFrame) return;
-
     const mouse = getMousePos(e);
     const dx = mouse.x - lastMouse.x;
     const dy = mouse.y - lastMouse.y;
@@ -274,7 +266,6 @@
     } else if (isDraggingWholeFrame) {
       pts.forEach(p => { p.x += dx; p.y += dy; });
     }
-
     lastMouse = mouse;
     saveConfig();
   }
@@ -287,12 +278,10 @@
   canvas.addEventListener('mousedown', handleStart);
   window.addEventListener('mousemove', handleMove);
   window.addEventListener('mouseup', handleEnd);
-
   canvas.addEventListener('touchstart', handleStart);
   window.addEventListener('touchmove', handleMove);
   window.addEventListener('touchend', handleEnd);
 
-  // DEFORMARE UV TRIUNGHIURI
   function drawTriangleUV(media, p0, p1, p2, u0, v0, u1, v1, u2, v2) {
     const w = media.videoWidth || media.width || 1;
     const h = media.videoHeight || media.height || 1;
@@ -341,7 +330,7 @@
     drawTriangleUV(media, center, p6, p5, 0.5, 0.5, 0.5, 1, 0, 1);
   }
 
-  // AI TRACKING SETUP
+  // MediaPipe AI Setup
   let latestPoseResults = null;
   let latestFaceResults = null;
   let latestSegmentationResults = null;
@@ -354,4 +343,147 @@
   faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5 });
   faceMesh.onResults((r) => { latestFaceResults = r; });
 
-  const selfieSegmentation = new SelfieSegmentation({ locateFile: (f) => `
+  const selfieSegmentation = new SelfieSegmentation({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}` });
+  selfieSegmentation.setOptions({ modelSelection: 1 });
+  selfieSegmentation.onResults((r) => { latestSegmentationResults = r; });
+
+  function drawPoseSkeleton(landmarks) {
+    const w = canvas.width;
+    const h = canvas.height;
+    const connections = [
+      [11, 12], [11, 23], [12, 24], [23, 24],
+      [11, 13], [13, 15], [12, 14], [14, 16]
+    ];
+
+    ctx.strokeStyle = '#00ffcc';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+
+    connections.forEach(([i, j]) => {
+      const p1 = landmarks[i];
+      const p2 = landmarks[j];
+      if (p1 && p2 && p1.visibility > 0.4 && p2.visibility > 0.4) {
+        ctx.beginPath();
+        ctx.moveTo(p1.x * w, p1.y * h);
+        ctx.lineTo(p2.x * w, p2.y * h);
+        ctx.stroke();
+      }
+    });
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 1. STRATUL 1 (SPATE): Fundal Video/Foto pe cele 8 puncte (Mapping 3D)
+    if (currentMedia) {
+      if (currentMedia === imageElem || (currentMedia === videoElem && videoElem.readyState >= 2)) {
+        renderSingleVideo8Points(currentMedia);
+      }
+    }
+
+    // 2. STRATUL 2: Camera Reală / AI Cut
+    if (showCamera && webcamElem.readyState >= 2) {
+      if (isAiCutOn && latestSegmentationResults) {
+        ctx.save();
+        ctx.drawImage(latestSegmentationResults.segmentationMask, 0, 0, canvas.width, canvas.height);
+        ctx.globalCompositeOperation = 'source-in';
+        ctx.drawImage(webcamElem, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      } else {
+        ctx.save();
+        ctx.globalAlpha = 0.8;
+        ctx.drawImage(webcamElem, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      }
+    }
+
+    // 3. STRATUL 3: Schelet Brațe / Torso
+    if (showPose && latestPoseResults && latestPoseResults.poseLandmarks) {
+      drawPoseSkeleton(latestPoseResults.poseLandmarks);
+    }
+
+    // 4. STRATUL 4: Mască PNG Ancorată pe Cap
+    if (hasAvatar && latestFaceResults && latestFaceResults.multiFaceLandmarks.length > 0) {
+      const landmarks = latestFaceResults.multiFaceLandmarks[0];
+      const nose = landmarks[1];
+      const headX = nose.x * canvas.width + parseFloat(offsetXSlider.value);
+      const headY = nose.y * canvas.height + parseFloat(offsetYSlider.value);
+      const scale = parseFloat(scaleSlider.value);
+      const rot = parseFloat(rotationSlider.value) * Math.PI / 180;
+
+      ctx.save();
+      ctx.translate(headX, headY);
+      ctx.rotate(rot);
+      const aW = avatarImg.width * scale;
+      const aH = avatarImg.height * scale;
+      ctx.drawImage(avatarImg, -aW / 2, -aH / 2, aW, aH);
+      ctx.restore();
+      statusEl.innerText = "Tracking Activ (Mască & Pose)";
+    } else {
+      statusEl.innerText = "Căutare față / cameră...";
+    }
+
+    // 5. STRATUL 5 (FAȚĂ): Grila de 8 puncte
+    if (showGrid) {
+      const [p0, p1, p2, p3, p4, p5, p6, p7] = pts;
+      ctx.strokeStyle = 'rgba(0, 255, 204, 0.5)';
+      ctx.lineWidth = 1.5;
+
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+      ctx.lineTo(p4.x, p4.y); ctx.lineTo(p7.x, p7.y); ctx.lineTo(p6.x, p6.y);
+      ctx.lineTo(p5.x, p5.y); ctx.lineTo(p3.x, p3.y); ctx.closePath();
+
+      ctx.moveTo(p1.x, p1.y); ctx.lineTo(p6.x, p6.y);
+      ctx.moveTo(p3.x, p3.y); ctx.lineTo(p4.x, p4.y);
+      ctx.moveTo(p0.x, p0.y); ctx.lineTo(p7.x, p7.y);
+      ctx.moveTo(p2.x, p2.y); ctx.lineTo(p5.x, p5.y);
+      ctx.stroke();
+
+      pts.forEach((p, idx) => {
+        ctx.fillStyle = (idx === 1 || idx === 6 || idx === 3 || idx === 4) ? '#ff0055' : '#00ffcc';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      });
+    }
+
+    requestAnimationFrame(render);
+  }
+
+  async function initCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 1280, height: 720 },
+        audio: false
+      });
+      webcamElem.srcObject = stream;
+      await webcamElem.play();
+
+      const camera = new window.Camera(webcamElem, {
+        onFrame: async () => {
+          if (showCamera || showPose || hasAvatar) {
+            if (isAiCutOn) await selfieSegmentation.send({ image: webcamElem });
+            if (showPose) await pose.send({ image: webcamElem });
+            if (hasAvatar) await faceMesh.send({ image: webcamElem });
+          }
+        },
+        width: 640,
+        height: 480
+      });
+      camera.start();
+      render();
+    } catch (err) {
+      statusEl.innerText = "Eroare acces cameră!";
+      console.error(err);
+      render();
+    }
+  }
+
+  window.addEventListener('DOMContentLoaded', initCamera);
+</script>
+</body>
+</html>
